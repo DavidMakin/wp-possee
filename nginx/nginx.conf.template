@@ -48,6 +48,7 @@ http {
         if ($request_uri ~* "/wp-admin/|/wp-login\.php|/feed/|/sitemap")      { set $skip_cache 1; }
         if ($http_cookie ~* "wordpress_logged_in|comment_author|wp-postpass") { set $skip_cache 1; }
         if ($http_user_agent ~* "bridgy|brid\.gy")                            { set $skip_cache 1; }
+        if ($http_authorization != "")                                         { set $skip_cache 1; }
 
         location = /xmlrpc.php {
             deny all;

@@ -1,0 +1,83 @@
+services:
+  wordpress:
+    image: dhi.io/wordpress:6.9.4-php8.3-fpm
+    volumes:
+      - wp_data:/var/www/html
+      - ./mu-plugins:/var/www/html/wp-content/mu-plugins
+      - ./php/uploads.ini:/opt/php-8.3/etc/php/conf.d/uploads.ini:ro
+    environment:
+      WORDPRESS_DB_HOST: mariadb:3306
+      WORDPRESS_DB_NAME: ${MYSQL_DATABASE}
+      WORDPRESS_DB_USER: ${MYSQL_USER}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD}
+      WORDPRESS_TABLE_PREFIX: wp_
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_HOME', 'https://${DOMAIN}');
+        define('WP_SITEURL', 'https://${DOMAIN}');
+        define('FORCE_SSL_ADMIN', true);
+        define('DISALLOW_FILE_EDIT', true);
+        define('WP_DEBUG', false);
+        define('AUTOMATIC_UPDATER_DISABLED', true);
+        define('WP_AUTO_UPDATE_CORE', false);
+        if (isset($$_SERVER['HTTP_X_FORWARDED_PROTO']) && $$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+          $$_SERVER['HTTPS'] = 'on';
+        }
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "php-fpm -t 2>&1 | grep -q 'successful'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - wp-possee
+      - db
+
+  nginx:
+    image: dhi.io/nginx:1
+    depends_on:
+      wordpress:
+        condition: service_healthy
+    volumes:
+      - wp_data:/var/www/html
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped
+    networks:
+      wp-possee:
+        aliases:
+          - ${DOMAIN}
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.5.0
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml
+    restart: unless-stopped
+    networks:
+      - wp-possee
+
+  wpcli:
+    image: wordpress:cli-php8.3
+    depends_on:
+      - wordpress
+    volumes:
+      - wp_data:/var/www/html
+      - ./mu-plugins:/var/www/html/wp-content/mu-plugins
+    environment:
+      WORDPRESS_DB_HOST: mariadb:3306
+      WORDPRESS_DB_NAME: ${MYSQL_DATABASE}
+      WORDPRESS_DB_USER: ${MYSQL_USER}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD}
+    user: "65532:65532"
+    profiles:
+      - tools
+    networks:
+      - wp-possee
+      - db
+
+networks:
+  wp-possee:
+  db:
+    external: true
+
+volumes:
+  wp_data:

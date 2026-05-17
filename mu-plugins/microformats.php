@@ -44,10 +44,6 @@ add_action( 'wp_head', function () {
 	}
 } );
 
-add_action( 'wp_footer', function () {
-	echo '<!-- MU_FOOTER_TEST -->' . "\n";
-} );
-
 add_action( 'plugins_loaded', function () {
 	if ( ! class_exists( 'SynProvider_Webmention_Bridgy' ) ) {
 		return;

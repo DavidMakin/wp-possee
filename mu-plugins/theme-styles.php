@@ -157,6 +157,123 @@ table thead th:first-child {
 	box-shadow: 0 4px 40px rgba(0,0,0,0.6);
 }
 
+/* Bluesky-style likes facepile — compact, small round avatars */
+.likes {
+	margin: 1.5em 0;
+	display: flex;
+	align-items: center;
+	gap: 0.4em;
+}
+
+.likes h3 {
+	display: none;
+}
+
+.likes .mention-list {
+	display: inline-flex;
+	align-items: center;
+	padding: 0;
+	margin: 0;
+	list-style: none;
+}
+
+.likes .mention-list li {
+	margin: 0 0 0 -8px;
+}
+
+.likes .mention-list li:first-child {
+	margin-left: 0;
+}
+
+.likes .mention-list li a {
+	display: block;
+	line-height: 0;
+}
+
+.likes .mention-list li img {
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	border: 2px solid #fff;
+	object-fit: cover;
+	display: block;
+	background: #f0f0f0;
+}
+
+.likes .likes-label {
+	font-size: 0.85em;
+	color: #666;
+	white-space: nowrap;
+}
+
+.likes .additional-facepile-button-list-item {
+	display: inline-flex !important;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	border: 2px solid #fff;
+	background: #f0f0f0;
+	margin: 0 0 0 -8px;
+	font-size: 11px;
+	color: #666;
+	cursor: pointer;
+	list-style: none;
+}
+
+.likes .additional-facepile-button-list-item button {
+	border: none;
+	background: none;
+	padding: 0;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+}
+
+/* also restyle reposts section to match */
+.reposts {
+	margin: 0.5em 0;
+	display: flex;
+	align-items: center;
+	gap: 0.4em;
+}
+
+.reposts h3 {
+	display: none;
+}
+
+.reposts .mention-list {
+	display: inline-flex;
+	align-items: center;
+	padding: 0;
+	margin: 0;
+	list-style: none;
+}
+
+.reposts .mention-list li {
+	margin: 0 0 0 -8px;
+}
+
+.reposts .mention-list li:first-child {
+	margin-left: 0;
+}
+
+.reposts .mention-list li a {
+	display: block;
+	line-height: 0;
+}
+
+.reposts .mention-list li img {
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	border: 2px solid #fff;
+	object-fit: cover;
+	display: block;
+	background: #f0f0f0;
+}
+
 /* Checkin card map image — inside entry-excerpt, after the text */
 .entry-card .sloc-map-thumb {
 	display: block;
@@ -180,6 +297,19 @@ add_action( 'wp_footer', function () {
 (function () {
 	var overlay = document.getElementById('blx-overlay');
 	var overlayImg = overlay.querySelector('img');
+
+	// Add "Liked by" label before Bluesky-style like avatars
+	var likesEl = document.querySelector('.likes');
+	if (likesEl) {
+		var count = likesEl.querySelectorAll('.mention-list li:not(.additional-facepile-button-list-item)').length;
+		if (count > 0) {
+			var label = document.createElement('span');
+			label.className = 'likes-label';
+			label.textContent = 'Liked by ' + count;
+			likesEl.insertBefore(label, likesEl.firstChild);
+		}
+	}
+
 
 	// Open on click of featured image container
 	document.querySelectorAll('.single .ct-featured-image .ct-media-container').forEach(function (el) {

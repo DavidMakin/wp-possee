@@ -245,6 +245,26 @@ add_filter( 'the_title', function ( $title, $id = null ) {
 	return '<span class="p-name">' . $title . '</span>';
 }, 10, 2 );
 
+// Don't count webmention types (like, repost, mention, etc.) in the comment number.
+// WordPress get_comments_number() counts all comment_type values, but likes/reposts
+// are displayed separately via Semantic Linkbacks facepile, not as real comments.
+add_filter( 'get_comments_number', function ( $count, $post_id ) {
+	if ( ! $post_id ) {
+		return $count;
+	}
+	$webmention_types = function_exists( 'get_webmention_comment_type_names' )
+		? get_webmention_comment_type_names()
+		: array( 'webmention', 'pingback', 'trackback' );
+	$placeholders     = implode( ',', array_fill( 0, count( $webmention_types ), '%s' ) );
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$non_count = $wpdb->get_var( $wpdb->prepare(
+		"SELECT COUNT(*) FROM {$wpdb->comments} WHERE comment_post_ID = %d AND comment_type IN ({$placeholders}) AND comment_approved = '1'",
+		array_merge( array( $post_id ), $webmention_types )
+	) );
+	return (int) $count - (int) $non_count;
+}, 10, 2 );
+
 // Webmention plugin's comment_query excludes 'like'/'repost'/etc. from ALL
 // comment queries that don't explicitly set type__in. This breaks Semantic
 // Linkbacks' get_linkbacks() which searches by meta_query without type__in.

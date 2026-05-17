@@ -245,6 +245,23 @@ add_filter( 'the_title', function ( $title, $id = null ) {
 	return '<span class="p-name">' . $title . '</span>';
 }, 10, 2 );
 
+// Block Bridgy Fed Bluesky self-comments from appearing as regular comments.
+// When Bridgy Fed reflects a syndicated post back as a webmention, the mf2
+// handler classifies it as type 'comment' (in-reply-to mapping) with author
+// "bsky.app". These aren't real user interactions — just Bridgy's own internal
+// notification. Spam them so they don't clutter the comment list.
+add_filter( 'webmention_comment_data', function ( $commentdata ) {
+	if ( ! $commentdata || is_wp_error( $commentdata ) ) {
+		return $commentdata;
+	}
+
+	if ( ( $commentdata['comment_author'] ?? '' ) === 'bsky.app' ) {
+		$commentdata['comment_approved'] = 'spam';
+	}
+
+	return $commentdata;
+}, 22 );
+
 // Blocksy uses get_the_date() output as a datetime= attribute value, so injecting HTML
 // via get_the_date filter causes double-encoding. Inject dt-published + u-url as hidden
 // elements inside e-content instead.

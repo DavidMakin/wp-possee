@@ -17,17 +17,28 @@ function possee_get_comments_number( $count, $post_id ) {
 	if ( ! $post_id ) {
 		return $count;
 	}
+	$cache_key = 'possee_non_comment_count_' . $post_id;
+	$non_count = wp_cache_get( $cache_key, 'comments' );
+	if ( false !== $non_count ) {
+		return (int) $count - (int) $non_count;
+	}
 	$webmention_types = function_exists( 'get_webmention_comment_type_names' )
 		? get_webmention_comment_type_names()
 		: array( 'webmention', 'pingback', 'trackback' );
 	$placeholders     = implode( ',', array_fill( 0, count( $webmention_types ), '%s' ) );
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$non_count = $wpdb->get_var( $wpdb->prepare(
+	$non_count = (int) $wpdb->get_var( $wpdb->prepare(
 		"SELECT COUNT(*) FROM {$wpdb->comments} WHERE comment_post_ID = %d AND comment_type IN ({$placeholders}) AND comment_approved = '1'",
 		array_merge( array( $post_id ), $webmention_types )
 	) );
-	return (int) $count - (int) $non_count;
+	wp_cache_set( $cache_key, $non_count, 'comments' );
+	return (int) $count - $non_count;
+}
+
+add_action( 'wp_update_comment_count', 'possee_clear_comment_count_cache' );
+function possee_clear_comment_count_cache( $post_id ) {
+	wp_cache_delete( 'possee_non_comment_count_' . $post_id, 'comments' );
 }
 
 add_action( 'pre_get_comments', 'possee_pre_get_comments_save_type_not_in', 9 );

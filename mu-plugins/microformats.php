@@ -346,7 +346,17 @@ add_filter( 'webmention_comment_data', function ( $commentdata ) {
 // via get_the_date filter causes double-encoding. Inject dt-published + u-url as hidden
 // elements inside e-content instead.
 // Run at priority 20 so Simple Location's map (appended at 11/12) is inside e-content.
+// Use a static flag to only run on the FIRST the_content call (main display).
+// Syndication Links calls apply_filters('the_content', ...) again when sending to
+// Bridgy — without this guard, the hidden dt-published/u-url text leaks into
+// Mastodon/Bluesky syndication posts after HTML is stripped.
 add_filter( 'the_content', function ( $content ) {
+	static $done = false;
+	if ( $done ) {
+		return $content;
+	}
+	$done = true;
+
 	if ( ! is_singular() ) {
 		return $content;
 	}

@@ -325,6 +325,27 @@ add_filter( 'get_comment_text', function ( $text, $comment ) {
 	return $text;
 }, 13, 2 );
 
+// Append "via [Platform]" to webmention comments so readers know where the
+// reply came from (Mastodon, Bluesky, etc.). Extract platform from the
+// webmention_source_url meta.
+add_filter( 'get_comment_text', function ( $text, $comment ) {
+	if ( 'webmention' !== get_comment_meta( $comment->comment_ID, 'protocol', true ) ) {
+		return $text;
+	}
+	$source_url = get_comment_meta( $comment->comment_ID, 'webmention_source_url', true );
+	if ( ! $source_url ) {
+		return $text;
+	}
+	// Determine platform from the Bridgy URL path
+	$via = 'webmention';
+	if ( preg_match( '#/comment/mastodon/#i', $source_url ) || preg_match( '#/repost/mastodon/#i', $source_url ) ) {
+		$via = 'Mastodon';
+	} elseif ( preg_match( '#/comment/bluesky/#i', $source_url ) || preg_match( '#/like/bluesky/#i', $source_url ) ) {
+		$via = 'Bluesky';
+	}
+	return $text . sprintf( ' (via %s)', $via );
+}, 13, 2 );
+
 // Block Bridgy Fed Bluesky self-comments from appearing as regular comments.
 // When Bridgy Fed reflects a syndicated post back as a webmention, the mf2
 // handler classifies it as type 'comment' (in-reply-to mapping) with author

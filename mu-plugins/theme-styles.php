@@ -151,6 +151,12 @@ table thead th:first-child {
 	gap: 0.4em;
 }
 
+/* Likes inside archive cards — tighter spacing */
+.entry-card .likes {
+	margin: 0.5em 0 0.3em;
+	line-height: 1;
+}
+
 .likes h3 {
 	display: none;
 }
@@ -297,6 +303,24 @@ table thead th:first-child {
 }, 5 );
 
 add_action( 'wp_footer', function () {
+	?>
+<script>
+(function () {
+	// Add "Liked by" heart label before each likes facepile
+	document.querySelectorAll('.likes').forEach(function (likesEl) {
+		var count = likesEl.querySelectorAll('.mention-list li:not(.additional-facepile-button-list-item)').length;
+		if (count > 0) {
+			var label = document.createElement('span');
+			label.className = 'likes-label';
+			label.innerHTML = '<svg viewBox="0 0 24 24" width="28" height="28" style="vertical-align:middle;fill:#e25555;margin-right:2px"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg> ' + count;
+			likesEl.insertBefore(label, likesEl.firstChild);
+		}
+	});
+}());
+</script>
+	<?php
+}, 5 );
+add_action( 'wp_footer', function () {
 	if ( ! is_singular() ) return;
 	?>
 <div id="blx-overlay" role="dialog" aria-modal="true" aria-label="Full size image" tabindex="-1">
@@ -308,26 +332,12 @@ add_action( 'wp_footer', function () {
 	var overlayImg = overlay.querySelector('img');
 	var triggerEl = null;
 
-	// Add "Liked by" label before Bluesky-style like avatars
-	var likesEl = document.querySelector('.likes');
-	if (likesEl) {
-		var count = likesEl.querySelectorAll('.mention-list li:not(.additional-facepile-button-list-item)').length;
-		if (count > 0) {
-			var label = document.createElement('span');
-			label.className = 'likes-label';
-			label.innerHTML = '<svg viewBox="0 0 24 24" width="28" height="28" style="vertical-align:middle;fill:#e25555;margin-right:2px"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg> ' + count;
-			likesEl.insertBefore(label, likesEl.firstChild);
-		}
-	}
-
-
 	// Open on click of featured image container
 	document.querySelectorAll('.single .ct-featured-image .ct-media-container').forEach(function (el) {
 		el.addEventListener('click', function () {
 			var img = el.querySelector('img');
 			if (!img) return;
 			triggerEl = el;
-			// Use largest srcset src, fall back to src
 			var src = img.src;
 			if (img.srcset) {
 				var parts = img.srcset.split(',').map(function (s) { return s.trim().split(/\s+/); });

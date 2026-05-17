@@ -153,6 +153,33 @@ function possee_checkin_excerpt( $excerpt, $post ) {
 	return wp_strip_all_tags( $post->post_content );
 }
 
+add_filter( 'blocksy:archive:render-card-layers', 'possee_archive_likes', 9, 3 );
+function possee_archive_likes( $outputs, $prefix, $featured_image_args ) {
+	if ( ! function_exists( 'get_linkbacks' ) || ! function_exists( 'list_linkbacks' ) ) {
+		return $outputs;
+	}
+	$likes = get_linkbacks( 'like' );
+	if ( empty( $likes ) ) {
+		return $outputs;
+	}
+	$links_html = list_linkbacks(
+		array(
+			'type' => 'like',
+			'echo' => false,
+		),
+		$likes
+	);
+	if ( $links_html ) {
+		$likes_html = '<div class="likes">' . $links_html . '</div>';
+		if ( isset( $outputs['excerpt'] ) ) {
+			$outputs['excerpt'] .= $likes_html;
+		} else {
+			$outputs['excerpt'] = $likes_html;
+		}
+	}
+	return $outputs;
+}
+
 add_filter( 'blocksy:archive:render-card-layers', 'possee_checkin_map_layer', 10, 3 );
 function possee_checkin_map_layer( $outputs, $prefix, $featured_image_args ) {
 	if ( is_singular() || ! has_tag( 'checkin' ) ) {

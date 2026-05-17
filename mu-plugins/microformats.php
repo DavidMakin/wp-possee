@@ -42,6 +42,14 @@ function possee_wp_head_microformats() {
 		echo '<meta property="og:title" content="' . esc_attr( get_bloginfo( 'name' ) ) . '" />' . "\n";
 		echo '<meta property="og:url" content="' . esc_url( home_url( '/' ) ) . '" />' . "\n";
 		echo '<meta property="og:description" content="' . esc_attr( get_bloginfo( 'description' ) ) . '" />' . "\n";
+	} elseif ( is_archive() ) {
+		$title       = esc_attr( get_the_archive_title() );
+		$description = esc_attr( strip_tags( get_the_archive_description() ) );
+		if ( $description ) {
+			echo '<meta property="og:type" content="website" />' . "\n";
+			echo '<meta property="og:title" content="' . $title . '" />' . "\n";
+			echo '<meta property="og:description" content="' . $description . '" />' . "\n";
+		}
 	}
 }
 

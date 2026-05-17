@@ -245,6 +245,25 @@ add_filter( 'the_title', function ( $title, $id = null ) {
 	return '<span class="p-name">' . $title . '</span>';
 }, 10, 2 );
 
+// Let Semantic Linkbacks process like-type webmentions too, not just
+// webmention/pingback/trackback. Otherwise Bridgy likes from Bluesky
+// land without semantic_linkbacks_type meta and display raw "Bridgy Response".
+add_filter( 'semantic_linkbacks_enhance_comment_types', function ( $types ) {
+	$types[] = 'like';
+	return $types;
+} );
+
+// Suppress "Bridgy Response" body text for like-type webmentions that
+// predate the semantic_linkbacks_enhance_comment_types fix. Bridgy sends
+// likes with content "Bridgy Response" which has no value to readers —
+// the like is already shown via avatar/facepile.
+add_filter( 'get_comment_text', function ( $text, $comment ) {
+	if ( isset( $comment->comment_type ) && 'like' === $comment->comment_type && 'Bridgy Response' === trim( $text ) ) {
+		return '';
+	}
+	return $text;
+}, 13, 2 );
+
 // Block Bridgy Fed Bluesky self-comments from appearing as regular comments.
 // When Bridgy Fed reflects a syndicated post back as a webmention, the mf2
 // handler classifies it as type 'comment' (in-reply-to mapping) with author

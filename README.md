@@ -94,6 +94,7 @@ docker compose pull && docker compose up -d
 ├── cloudflared/
 │   └── config.yml.example    # copy to config.yml and fill in tunnel ID
 ├── mu-plugins/
+│   ├── comments.php          # comment & webmention handling
 │   ├── loopback-fix.php      # fixes WordPress loopback requests inside Docker
 │   ├── microformats.php      # h-entry, IndieWeb microformats, checkin handling
 │   └── theme-styles.php      # custom styles

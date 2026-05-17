@@ -9,7 +9,7 @@ Operational knowledge for AI agents working on this repo. Read before touching a
 - **Cloudflared** (Cloudflare Tunnel — no open ports)
 - **MariaDB** (external container on `db` network, shared with other services)
 - **Theme**: Blocksy + Blocksy Companion (font/color/typography configured via Customizer GUI — do not override in mu-plugin)
-- **mu-plugins**: `microformats.php`, `theme-styles.php`, `loopback-fix.php`
+- **mu-plugins**: `microformats.php`, `comments.php`, `theme-styles.php`, `loopback-fix.php`
 
 ## Critical: WP-CLI invocation
 
@@ -166,14 +166,7 @@ Do not set `font-family` in mu-plugin CSS — Blocksy's Customizer handles it. T
 **Micropub post sanitisation**
 - `pre_insert_micropub_post`: sanitises tags array (filters non-strings), generates checkin post content from venue name/locality, sets `post-format-status`
 
-**Comment / webmention handling**
-- `get_comments_number` (priority 10): subtracts webmention-type comments (like, repost, mention) from the count shown to users
-- `pre_get_comments` (priority 9): saves original `type__not_in` before Webmention plugin overwrites it at priority 10
-- `pre_get_comments` (priority 11): restores `type__not_in` for `mention` queries (Semantic Linkbacks), or strips webmention types for `like`/`repost` queries
-- `semantic_linkbacks_enhance_comment_types`: adds `'like'` so Bridgy Bluesky likes get proper `semantic_linkbacks_type` meta
-- `get_comment_text` (priority 13): suppresses "Bridgy Response" text for like-type webmentions
-- `get_comment_text` (priority 13): appends ` (via Mastodon)` or ` (via Bluesky)` to webmention comments based on `webmention_source_url` meta
-- `webmention_comment_data` (priority 22): marks Bridgy Fed `bsky.app` self-comments as spam
+**Named functions**: All hooks use named functions (`possee_*` prefix) for grepability and `remove_filter` support. The only remaining closure is in `plugins_loaded` (wraps a class definition).
 
 ### `theme-styles.php`
 
@@ -198,6 +191,18 @@ All CSS values in this file are **not configurable via Blocksy Customizer** — 
 | `.sloc-map-thumb` | Checkin map thumbnail: 16/9 aspect, `border: 1px solid #ddd`, subtle shadow |
 
 **JS (injected via wp_footer)**: Adds heart SVG label to likes facepile, implements image lightbox (opens on `.ct-featured-image` click, closes on click or Escape).
+
+### `comments.php`
+
+Comment & webmention handling extracted from microformats.php for clarity.
+
+- `get_comments_number` (priority 10): subtracts webmention-type comments (like, repost, mention) from the count shown to users
+- `pre_get_comments` (priority 9): saves original `type__not_in` before Webmention plugin overwrites it at priority 10
+- `pre_get_comments` (priority 11): restores `type__not_in` for `mention` queries (Semantic Linkbacks), or strips webmention types for `like`/`repost` queries
+- `semantic_linkbacks_enhance_comment_types`: adds `'like'` so Bridgy Bluesky likes get proper `semantic_linkbacks_type` meta
+- `get_comment_text` (priority 13): suppresses "Bridgy Response" text for like-type webmentions
+- `get_comment_text` (priority 13): appends ` (via Mastodon)` or ` (via Bluesky)` to webmention comments based on `webmention_source_url` meta
+- `webmention_comment_data` (priority 22): marks Bridgy Fed `bsky.app` self-comments as spam
 
 ### `loopback-fix.php`
 - WordPress loopback HTTPS requests fail inside Docker because `wp_safe_remote_get()` resolves the public domain to the nginx container's private IP (rejected as unsafe).

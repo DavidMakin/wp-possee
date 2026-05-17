@@ -1,14 +1,1 @@
-# Secrets
-.env
-cloudflared/config.yml
-
-# Generated files
-nginx/nginx.conf
-
-# Backups
-backups/
-
-# Tooling caches
-.ruff_cache/
-__pycache__/
-*.pyc
+.sisyphus/

@@ -2,17 +2,6 @@
 add_action( 'wp_head', function () {
 	?>
 <style>
-body {
-	color: #515151;
-	-webkit-font-smoothing: antialiased;
-}
-
-h1, h2, h3, h4, h5, h6 {
-	font-family: 'Lato', sans-serif;
-	color: #263959;
-	font-weight: 400;
-}
-
 code:not(pre code) {
 	font-family: monospace, monospace;
 	color: #ce887b;

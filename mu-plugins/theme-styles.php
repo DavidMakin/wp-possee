@@ -274,7 +274,10 @@ table thead th:first-child {
 	background: #f0f0f0;
 }
 
-/* Tighten comments section spacing */
+/* Tighten comments section spacing — higher specificity to override Blocksy external CSS */
+#comments .ct-comments-title {
+	margin-bottom: 20px;
+}
 .ct-comments-title {
 	margin-bottom: 20px;
 }

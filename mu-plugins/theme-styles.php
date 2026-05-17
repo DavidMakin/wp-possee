@@ -290,6 +290,10 @@ table thead th:first-child {
 .comment-respond:not(:only-child) .comment-reply-title {
 	padding-top: 20px;
 }
+#comments {
+	margin-top: 25px;
+	padding-top: 25px;
+}
 
 /* Checkin card map image — inside entry-excerpt, after the text */
 .entry-card .sloc-map-thumb {

@@ -305,7 +305,7 @@ add_action( 'wp_footer', function () {
 		if (count > 0) {
 			var label = document.createElement('span');
 			label.className = 'likes-label';
-			label.textContent = 'Liked by ' + count;
+			label.innerHTML = '♥ ' + count;
 			likesEl.insertBefore(label, likesEl.firstChild);
 		}
 	}

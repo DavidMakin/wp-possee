@@ -264,11 +264,12 @@ function possee_title_pname( $title, $id = null ) {
 
 add_filter( 'the_content', 'possee_wrap_econtent', 20 );
 function possee_wrap_econtent( $content ) {
-	static $done = false;
-	if ( $done ) {
+	static $done = array();
+	$post_id = get_the_ID();
+	if ( isset( $done[ $post_id ] ) ) {
 		return $content;
 	}
-	$done = true;
+	$done[ $post_id ] = true;
 
 	if ( ! is_singular() ) {
 		return $content;

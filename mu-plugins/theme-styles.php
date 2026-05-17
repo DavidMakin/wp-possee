@@ -274,6 +274,20 @@ table thead th:first-child {
 	background: #f0f0f0;
 }
 
+/* Tighten comments section spacing */
+.ct-comments-title {
+	margin-bottom: 20px;
+}
+.ct-comment-inner {
+	padding-block: 15px;
+}
+.comment-respond + .ct-comment-list {
+	margin-top: 20px;
+}
+.comment-respond:not(:only-child) .comment-reply-title {
+	padding-top: 20px;
+}
+
 /* Checkin card map image — inside entry-excerpt, after the text */
 .entry-card .sloc-map-thumb {
 	display: block;

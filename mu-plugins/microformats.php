@@ -200,6 +200,9 @@ function possee_syn_link_mapping( $return, $url ) {
 	if ( 'hachyderm.io' === $domain ) {
 		return 'mastodon';
 	}
+	if ( 'bsky.app' === $domain || 'bsky.social' === $domain ) {
+		return 'bluesky';
+	}
 	return $return;
 }
 

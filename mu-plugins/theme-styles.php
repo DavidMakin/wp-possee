@@ -299,13 +299,14 @@ table thead th:first-child {
 add_action( 'wp_footer', function () {
 	if ( ! is_singular() ) return;
 	?>
-<div id="blx-overlay" role="dialog" aria-modal="true" aria-label="Full size image">
-	<img src="" alt="" />
+<div id="blx-overlay" role="dialog" aria-modal="true" aria-label="Full size image" tabindex="-1">
+	<img src="" alt="" tabindex="-1" />
 </div>
 <script>
 (function () {
 	var overlay = document.getElementById('blx-overlay');
 	var overlayImg = overlay.querySelector('img');
+	var triggerEl = null;
 
 	// Add "Liked by" label before Bluesky-style like avatars
 	var likesEl = document.querySelector('.likes');
@@ -325,6 +326,7 @@ add_action( 'wp_footer', function () {
 		el.addEventListener('click', function () {
 			var img = el.querySelector('img');
 			if (!img) return;
+			triggerEl = el;
 			// Use largest srcset src, fall back to src
 			var src = img.src;
 			if (img.srcset) {
@@ -338,6 +340,7 @@ add_action( 'wp_footer', function () {
 			overlayImg.alt = img.alt;
 			overlay.classList.add('blx-open');
 			document.body.style.overflow = 'hidden';
+			setTimeout(function () { overlay.focus(); }, 50);
 		});
 	});
 
@@ -347,10 +350,21 @@ add_action( 'wp_footer', function () {
 		if (e.key === 'Escape') close();
 	});
 
+	// Trap Tab focus inside overlay
+	overlay.addEventListener('keydown', function (e) {
+		if (e.key === 'Tab') {
+			e.preventDefault();
+		}
+	});
+
 	function close() {
 		overlay.classList.remove('blx-open');
 		document.body.style.overflow = '';
 		overlayImg.src = '';
+		if (triggerEl) {
+			triggerEl.focus();
+			triggerEl = null;
+		}
 	}
 }());
 </script>

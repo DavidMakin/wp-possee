@@ -265,20 +265,42 @@ add_filter( 'get_comments_number', function ( $count, $post_id ) {
 	return (int) $count - (int) $non_count;
 }, 10, 2 );
 
-// Webmention plugin's comment_query excludes 'like'/'repost'/etc. from ALL
-// comment queries that don't explicitly set type__in. This breaks Semantic
-// Linkbacks' get_linkbacks() which searches by meta_query without type__in.
-// Catch queries looking for semantic_linkbacks_type meta and undo the exclusion.
+// Webmention plugin's comment_query replaces type__not_in entirely (priority 10),
+// which breaks Semantic Linkbacks' get_linkbacks() queries. For 'like'/'repost'
+// we need to strip webmention types; for 'mention' we need to preserve SL's
+// explicit type__not_in = 'comment'. Save the original before WM overwrites it.
 add_action( 'pre_get_comments', function ( $query ) {
-	if ( empty( $query->query_vars['meta_query'] ) || empty( $query->query_vars['type__not_in'] ) ) {
+	$meta_query = $query->query_vars['meta_query'] ?? array();
+	if ( empty( $meta_query ) ) {
 		return;
 	}
-	foreach ( $query->query_vars['meta_query'] as $mq ) {
-		if ( isset( $mq['key'] ) && 'semantic_linkbacks_type' === $mq['key'] ) {
-			$query->query_vars['type__not_in'] = array_diff(
-				$query->query_vars['type__not_in'],
-				get_webmention_comment_type_names()
-			);
+	foreach ( $meta_query as $mq ) {
+		if ( is_array( $mq ) && isset( $mq['key'] ) && 'semantic_linkbacks_type' === $mq['key'] ) {
+			if ( ! empty( $query->query_vars['type__not_in'] ) ) {
+				$query->_sl_saved_type_not_in = $query->query_vars['type__not_in'];
+			}
+			return;
+		}
+	}
+}, 9 );
+
+add_action( 'pre_get_comments', function ( $query ) {
+	$meta_query = $query->query_vars['meta_query'] ?? array();
+	if ( empty( $meta_query ) || empty( $query->query_vars['type__not_in'] ) ) {
+		return;
+	}
+	foreach ( $meta_query as $mq ) {
+		if ( is_array( $mq ) && isset( $mq['key'] ) && 'semantic_linkbacks_type' === $mq['key'] ) {
+			if ( isset( $query->_sl_saved_type_not_in ) ) {
+				// 'mention' type query: SL set type__not_in, WM overwrote it — restore.
+				$query->query_vars['type__not_in'] = $query->_sl_saved_type_not_in;
+			} else {
+				// 'like'/'repost' query: WM added webmention types — strip them.
+				$query->query_vars['type__not_in'] = array_diff(
+					$query->query_vars['type__not_in'],
+					get_webmention_comment_type_names()
+				);
+			}
 			return;
 		}
 	}

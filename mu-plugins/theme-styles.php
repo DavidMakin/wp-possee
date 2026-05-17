@@ -8,20 +8,9 @@ body {
 }
 
 h1, h2, h3, h4, h5, h6 {
-	font-family: 'PT Serif', serif;
-	color: #263959;
-	font-weight: 400;
-}
-
-/* Page titles (single post heading) use Lato, matching the theme's body font.
-   PT Serif isn't loaded as a web font, so relying on a fallback serif looks
-   inconsistent. Blocksy already sets --theme-font-family: Lato for .page-title
-   via global.css, but our earlier h1 rule's direct font-family wins on
-   specificity — override back to Lato here. */
-.entry-header .page-title,
-.entry-header .entry-title {
 	font-family: 'Lato', sans-serif;
 	color: #263959;
+	font-weight: 400;
 }
 
 code:not(pre code) {

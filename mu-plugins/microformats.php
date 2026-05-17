@@ -245,6 +245,25 @@ add_filter( 'the_title', function ( $title, $id = null ) {
 	return '<span class="p-name">' . $title . '</span>';
 }, 10, 2 );
 
+// Webmention plugin's comment_query excludes 'like'/'repost'/etc. from ALL
+// comment queries that don't explicitly set type__in. This breaks Semantic
+// Linkbacks' get_linkbacks() which searches by meta_query without type__in.
+// Catch queries looking for semantic_linkbacks_type meta and undo the exclusion.
+add_action( 'pre_get_comments', function ( $query ) {
+	if ( empty( $query->query_vars['meta_query'] ) || empty( $query->query_vars['type__not_in'] ) ) {
+		return;
+	}
+	foreach ( $query->query_vars['meta_query'] as $mq ) {
+		if ( isset( $mq['key'] ) && 'semantic_linkbacks_type' === $mq['key'] ) {
+			$query->query_vars['type__not_in'] = array_diff(
+				$query->query_vars['type__not_in'],
+				get_webmention_comment_type_names()
+			);
+			return;
+		}
+	}
+}, 11 );
+
 // Let Semantic Linkbacks process like-type webmentions too, not just
 // webmention/pingback/trackback. Otherwise Bridgy likes from Bluesky
 // land without semantic_linkbacks_type meta and display raw "Bridgy Response".

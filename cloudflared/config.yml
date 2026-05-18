@@ -1,0 +1,6 @@
+tunnel: e86639fe-5b2d-442a-8008-d7953cf69ec7
+
+ingress:
+  - hostname: blog.sleep-er.co.uk
+    service: http://nginx:80
+  - service: http_status:404

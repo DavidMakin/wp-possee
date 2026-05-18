@@ -287,16 +287,239 @@ table thead th:first-child {
 	padding-top: 25px;
 }
 
-/* Checkin card map image — inside entry-excerpt, after the text */
+.checkin-excerpt {
+	font-size: 0.9em;
+	color: #555;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.checkin-excerpt-venue {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.checkin-excerpt-venue .checkin-venue-icon {
+	flex-shrink: 0;
+}
+
+.checkin-excerpt-meta {
+	font-size: 0.92em;
+	color: #888;
+}
+
+.checkin-excerpt a {
+	color: #333;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.checkin-excerpt a:hover {
+	text-decoration: underline;
+}
+
+/* ── Checkin card: map thumbnail (no featured image) ──────────── */
 .entry-card .sloc-map-thumb {
 	display: block;
 	width: 100%;
 	margin-top: 0.75em;
-	aspect-ratio: 16/9;
+	aspect-ratio: 4/3;
 	object-fit: cover;
 	border-radius: 4px;
 	border: 1px solid #ddd;
 	box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* ── Checkin single post: header block ───────────────────────── */
+.checkin-header {
+	margin-bottom: 1.5em;
+}
+
+.checkin-header .checkin-map {
+	display: block;
+	width: 100%;
+	aspect-ratio: 3/1;
+	object-fit: cover;
+	border-radius: 6px;
+	border: 1px solid #ddd;
+	box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+	margin-bottom: 0.75em;
+}
+
+.checkin-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 0.2em;
+}
+
+.checkin-venue {
+	font-size: 1.15em;
+	font-weight: 600;
+	color: #222;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.checkin-by {
+	font-size: 0.85em;
+	color: #777;
+	margin-top: 2px;
+}
+
+.checkin-by a {
+	color: #555;
+}
+
+.checkin-venue-link {
+	font-weight: 700;
+	color: #1a1a1a;
+	text-decoration: none;
+}
+
+.checkin-venue-link:hover {
+	text-decoration: underline;
+}
+
+.checkin-place {
+	font-size: 0.9em;
+	color: #666;
+}
+
+.checkin-weather {
+	font-size: 0.85em;
+	color: #888;
+}
+
+.checkin-coords-wrap {
+	font-size: 0.8em;
+	color: #aaa;
+}
+
+.checkin-coords {
+	color: inherit;
+	text-decoration: none;
+	font-family: monospace, monospace;
+}
+
+.checkin-coords:hover {
+	color: #555;
+}
+
+.checkin-via {
+	font-size: 0.8em;
+	color: #aaa;
+	margin-top: 1em;
+}
+
+.checkin-via a {
+	color: #aaa;
+}
+.checkin-coins {
+	margin-top: 12px;
+	padding: 10px 14px;
+	background: #fffbea;
+	border-left: 3px solid #c8a000;
+	border-radius: 4px;
+	font-size: 0.88em;
+}
+
+.checkin-coins-total {
+	font-weight: 700;
+	font-size: 1.1em;
+	color: #c8a000;
+	margin-bottom: 6px;
+	display: flex;
+	align-items: center;
+	gap: 5px;
+}
+
+.checkin-coins-total span {
+	font-weight: 400;
+	color: #888;
+	font-size: 0.85em;
+	margin-left: 2px;
+}
+
+.checkin-coins-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.checkin-coins-list li {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 0;
+	color: #555;
+}
+
+.coin-points {
+	font-weight: 700;
+	color: #c8a000;
+	min-width: 28px;
+}
+
+.checkin-coins-list img {
+	flex-shrink: 0;
+}
+/* ── Venue page: recent check-ins ────────────────────────────── */
+.venue-checkins {
+	margin-top: 2em;
+	border-top: 1px solid #e5e5e5;
+	padding-top: 1.25em;
+}
+
+.venue-checkins-title {
+	font-size: 1em;
+	font-weight: 600;
+	color: #555;
+	margin: 0 0 0.75em;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.venue-checkins-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.venue-checkin-item {
+	display: flex;
+	align-items: baseline;
+	gap: 0.5em;
+	padding: 0.35em 0;
+	border-bottom: 1px solid #f0f0f0;
+	font-size: 0.9em;
+}
+
+.venue-checkin-item:last-child {
+	border-bottom: none;
+}
+
+.venue-checkin-date {
+	font-weight: 600;
+	color: #333;
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.venue-checkin-date:hover {
+	text-decoration: underline;
+}
+
+.venue-checkin-by {
+	color: #555;
+}
+
+.venue-checkin-meta {
+	color: #999;
+	margin-left: auto;
+	white-space: nowrap;
 }
 </style>
 	<?php

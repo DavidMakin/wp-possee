@@ -120,3 +120,4 @@ function possee_spam_bsky_self_comments( $commentdata ) {
 	}
 	return $commentdata;
 }
+

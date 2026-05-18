@@ -2,6 +2,10 @@
 
 Operational knowledge for AI agents working on this repo. Read before touching anything.
 
+## Writing blog posts
+
+See **[VOICE.md](./VOICE.md)** for the author's tone, patterns to use, and patterns to avoid. Read it before writing or editing any post content.
+
 ## Stack
 
 - **WordPress** (DHI hardened image, PHP-FPM, no shell)

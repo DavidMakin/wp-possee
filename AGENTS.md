@@ -192,7 +192,7 @@ All CSS values in this file are **not configurable via Blocksy Customizer** — 
 | `.likes` facepile | Bluesky-style: `28px` round avatars with `-8px` overlap, heart SVG label, `+N` overflow button |
 | `.reposts` facepile | Same style as `.likes` |
 | `#comments` | Tighter spacing: reduced margin/padding on titles, inner padding, comment-respond |
-| `.sloc-map-thumb` | Checkin map thumbnail: 16/9 aspect, `border: 1px solid #ddd`, subtle shadow |
+| `.sloc-map-thumb` | Checkin map thumbnail: 4/3 aspect, `border: 1px solid #ddd`, subtle shadow |
 
 **JS (injected via wp_footer)**: Adds heart SVG label to likes facepile, implements image lightbox (opens on `.ct-featured-image` click, closes on click or Escape).
 
@@ -241,3 +241,12 @@ ssh homeip docker exec mariadb mysqldump -u wordpress -pGlimmer-Ripeness3-Diffus
 - **One commit = one thing**: one feature, one fix, one chore — never bundle unrelated changes
 - Body only when the *why* isn't obvious; wrap at 72 chars
 - No AI attribution, no "this commit does X", no emoji
+
+## NEVER
+
+- **Never set `font-family` in mu-plugin CSS** — Blocksy Customizer owns typography. Exception: `monospace` for code elements.
+- **Never run multi-line commands over `ssh homeip` without `bash << 'EOF' ... EOF`** — remote shell is fish, which breaks bash heredocs and quoting.
+- **Never edit mu-plugin files directly on the server** — edit locally under `mu-plugins/`, then `scp` and restart. Direct edits are overwritten on next deploy.
+- **Never skip clearing all three caches after a PHP change** — OPcache, nginx fastcgi cache, and WP-Optimize disk cache are independent. Missing one means stale output with no obvious cause.
+- **Never omit `--user 65532` from WP-CLI containers** — the uploads directory is owned by that UID; omitting it silently breaks any file write including `media_sideload_image`.
+- **Never use `$post->post_excerpt` to check for a native excerpt** — use `has_excerpt($post_id)`, which checks the raw DB value. Our `get_the_excerpt` filter can return non-empty strings even when no native excerpt exists, causing Blocksy's hero to render generated content as a description.

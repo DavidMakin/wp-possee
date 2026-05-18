@@ -231,3 +231,13 @@ Comment & webmention handling extracted from microformats.php for clarity.
 ```bash
 ssh homeip docker exec mariadb mysqldump -u wordpress -pGlimmer-Ripeness3-Diffused-Geography wordpress | gzip > /Storage/docker/wp-possee/backups/wordpress-$(date +%Y%m%d-%H%M%S).sql.gz
 ```
+
+## Git commit conventions
+
+- Load the `caveman-commit` skill before writing any commit message
+- Follow **Conventional Commits**: `<type>(<scope>): <summary>`
+- Types: `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `chore`, `style`
+- Subject ≤50 chars, imperative mood, no trailing period
+- **One commit = one thing**: one feature, one fix, one chore — never bundle unrelated changes
+- Body only when the *why* isn't obvious; wrap at 72 chars
+- No AI attribution, no "this commit does X", no emoji

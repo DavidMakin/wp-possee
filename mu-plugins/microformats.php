@@ -480,7 +480,8 @@ function possee_checkin_header( $content ) {
 				? '<a href="' . esc_url( $person['url'] ) . '">' . esc_html( $person['name'] ) . '</a>'
 				: esc_html( $person['name'] );
 		}
-		$header .= '<div class="checkin-by">Checked in by ' . implode( ', ', $by_parts ) . '</div>';
+		$checkin_dt = get_the_date( 'j M Y' ) . ' at ' . get_the_time( 'H:i' );
+		$header .= '<div class="checkin-by">Checked in by ' . implode( ', ', $by_parts ) . ' <span class="checkin-by-date">' . esc_html( $checkin_dt ) . '</span></div>';
 	}
 	if ( $place ) {
 		$header .= '<div class="checkin-place">' . esc_html( $place ) . '</div>';

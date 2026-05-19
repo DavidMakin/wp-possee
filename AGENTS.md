@@ -227,6 +227,36 @@ Custom post types: `book`, `checkin`, `note`.
 - `pre_http_request` (priority 10): rewrites `https://domain` → `http://nginx`, sets `Host` header, retries with `wp_remote_request`
 - Uses a static `$in_progress` guard to prevent infinite recursion
 
+## Header Post Counts widget
+
+The "Post Counts" element in the header (Blocksy header builder, middle-row, end column) shows counts like "8 Articles". It is configured **entirely in the Customizer UI** — there is no PHP filter or hook for the item list.
+
+### How the config is stored
+
+All header builder state lives in a single theme mod: `header_placements`. The `post-counts` item appears in the `items` array with an optional `values` key. When `values` is absent or empty the widget uses Blocksy's built-in default, which shows only standard `post` type posts labelled "Articles" linking to `/articles/`.
+
+### Adding CPTs to the count
+
+To add books, notes, checkins (or change labels/URLs) you must either:
+
+1. **Use the Customizer UI** — Appearance → Customize → Header → middle row → Post Counts → add items there. This is the preferred approach; it writes the `values` into `header_placements` in the DB automatically.
+
+2. **Patch the DB directly via WP-CLI** — read the current `header_placements` mod, find the `post-counts` item in the `items` array, set its `values.header_post_counts_items` to an array of objects like:
+   ```json
+   [
+     { "id": "articles", "post_type": "post",    "label": "Articles", "url": "/articles/", "enabled": true },
+     { "id": "books",    "post_type": "book",     "label": "Books",    "url": "/books/",    "enabled": true },
+     { "id": "notes",    "post_type": "note",     "label": "Notes",    "url": "/notes/",    "enabled": true },
+     { "id": "checkins", "post_type": "checkin",  "label": "Checkins", "url": "/checkins/", "enabled": true }
+   ]
+   ```
+   Then call `set_theme_mod('header_placements', $updated)`.
+
+### What NOT to do
+
+- There is **no PHP filter** for the post counts item list — searching the theme/plugin PHP for `post-counts` or `post_counts_items` returns nothing because the feature is compiled into JS bundles.
+- Do not try to grep the theme or blocksy-companion PHP for this feature; it lives entirely in the Customizer JS runtime.
+
 ## Plugin notes
 
 | Plugin | Note |

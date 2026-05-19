@@ -27,7 +27,7 @@ docker run --rm \
   --network db \
   -e WORDPRESS_DB_HOST=mariadb \
   -e WORDPRESS_DB_USER=wordpress \
-  -e WORDPRESS_DB_PASSWORD=Glimmer-Ripeness3-Diffused-Geography \
+  -e WORDPRESS_DB_PASSWORD=${MYSQL_PASSWORD} \
   -e WORDPRESS_DB_NAME=wordpress \
   wordpress:cli-php8.3 wp --allow-root <command>
 ```
@@ -63,7 +63,7 @@ Remote shell is **fish** — always use `ssh homeip bash << 'EOF' ... EOF` for m
 | Thing | Value |
 |---|---|
 | MariaDB container | `mariadb` (external, on `db` network) |
-| DB credentials | user=`wordpress` pass=`Glimmer-Ripeness3-Diffused-Geography` db=`wordpress` |
+| DB credentials | user=`wordpress` pass=`$MYSQL_PASSWORD` db=`wordpress` |
 | WordPress container | `wp-possee-wordpress-1` (DHI hardened, no shell) |
 | Uploads owner UID | `65532` |
 | Ingress | Cloudflare Tunnel → nginx → PHP-FPM |
@@ -283,7 +283,7 @@ The workflow is stored in SQLite at `/var/lib/docker/volumes/n8n_n8n_data/_data/
 ## Backups
 
 ```bash
-ssh homeip docker exec mariadb mysqldump -u wordpress -pGlimmer-Ripeness3-Diffused-Geography wordpress | gzip > /Storage/docker/wp-possee/backups/wordpress-$(date +%Y%m%d-%H%M%S).sql.gz
+ssh homeip docker exec mariadb mysqldump -u wordpress -p"${MYSQL_PASSWORD}" wordpress | gzip > /Storage/docker/wp-possee/backups/wordpress-$(date +%Y%m%d-%H%M%S).sql.gz
 ```
 
 ## Git commit conventions
@@ -295,6 +295,10 @@ ssh homeip docker exec mariadb mysqldump -u wordpress -pGlimmer-Ripeness3-Diffus
 - **One commit = one thing**: one feature, one fix, one chore — never bundle unrelated changes. A single change can span multiple files (e.g. PHP + CSS for the same feature), but don't mix distinct changes in one commit.
 - Body only when the *why* isn't obvious; wrap at 72 chars
 - No AI attribution, no "this commit does X", no emoji
+
+## Colophon
+
+The site has a `/built-with/` page (post ID 385) listing the tech stack. Update it whenever the infrastructure, theme, or plugin list changes.
 
 ## NEVER
 

@@ -257,6 +257,30 @@ To add books, notes, checkins (or change labels/URLs) you must either:
 - There is **no PHP filter** for the post counts item list — searching the theme/plugin PHP for `post-counts` or `post_counts_items` returns nothing because the feature is compiled into JS bundles.
 - Do not try to grep the theme or blocksy-companion PHP for this feature; it lives entirely in the Customizer JS runtime.
 
+### Implementation: custom header item
+
+The post-counts widget is **not** a built-in Blocksy feature — it is a custom header item registered by a mu-plugin and loaded from:
+
+```
+mu-plugins/header-items/post-counts/
+  config.php   — registers the item with Blocksy's header builder
+  options.php  — Customizer panel options
+  view.php     — renders the HTML
+```
+
+Blocksy discovers custom header items via the `blocksy:header:items-paths` filter (or equivalent registration). The item path is resolved at runtime; Blocksy confirmed the path as `/var/www/html/wp-content/mu-plugins/header-items/post-counts` when queried via `ReflectionClass`.
+
+### Counts and sparklines
+
+`view.php` runs a single SQL query against `wp_posts` grouped by `post_type` and `DATE_FORMAT(post_date, '%x%v')` (ISO year+week). It builds:
+
+- **Total counts** via `wp_count_posts()` per CPT
+- **52-week sparklines** — one `int` per ISO week, oldest first — as inline SVG `<polyline>` elements, generated entirely in PHP with no JS or charting library
+
+Results are cached in a WordPress transient `possee_header_post_counts_v2` for 12 hours. To force refresh: `wp transient delete possee_header_post_counts_v2`.
+
+The sparkline SVG is 52×16px, `preserveAspectRatio="none"`, styled via `.post-counts-sparkline` in `theme-styles.php` (35% opacity, brightens on hover).
+
 ## Plugin notes
 
 | Plugin | Note |

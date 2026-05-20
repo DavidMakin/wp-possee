@@ -959,6 +959,43 @@ table thead th:first-child {
 	text-transform: uppercase;
 	letter-spacing: 0.06em;
 }
+
+/* Status filter bar on /books/ archive */
+.book-filter-bar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4em;
+	margin-bottom: 1.5em;
+}
+
+.book-filter {
+	display: inline-block;
+	padding: 0.3em 0.8em;
+	border-radius: 999px;
+	border: 1px solid #d0d0d0;
+	font-size: 0.85em;
+	color: #555;
+	text-decoration: none;
+	background: #fff;
+	transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.book-filter:hover {
+	border-color: #999;
+	color: #222;
+}
+
+.book-filter--active {
+	background: #263959;
+	border-color: #263959;
+	color: #fff;
+}
+
+.book-filter--active:hover {
+	background: #1e2e46;
+	border-color: #1e2e46;
+	color: #fff;
+}
 </style>
 	<?php
 }, 5 );

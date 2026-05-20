@@ -14,7 +14,17 @@ function possee_wp_head_microformats() {
 		$description = esc_attr( has_excerpt( $post ) ? get_the_excerpt( $post ) : wp_trim_words( strip_tags( $post->post_content ), 30 ) );
 
 		$image = '';
-		if ( has_post_thumbnail( $post ) ) {
+		if ( 'book' === $post->post_type ) {
+			$book_data = possee_book_get_data( $post->ID );
+			if ( $book_data ) {
+				if ( $book_data['isbn'] ) {
+					$image = possee_book_cover_url( $book_data['isbn'], 'L' );
+				} elseif ( ! empty( $book_data['hc_cover'] ) ) {
+					$image = $book_data['hc_cover'];
+				}
+			}
+		}
+		if ( ! $image && has_post_thumbnail( $post ) ) {
 			$src = wp_get_attachment_image_src( get_post_thumbnail_id( $post ), 'large' );
 			if ( $src ) {
 				$image = esc_url( $src[0] );

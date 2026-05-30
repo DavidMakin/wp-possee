@@ -642,6 +642,17 @@ function possee_micropub_book_deduplicate( $args ) {
 	if ( ! empty( $existing ) ) {
 		// Short-circuit — book already exists.
 		$args['ID'] = $existing[0];
+
+		// When transitioning to "finished", update post_date to match.
+		$new_status = $args['meta_input']['mf2_read-status'] ?? null;
+		if ( 'finished' === $new_status ) {
+			$finished_at = $args['meta_input']['mf2_finished-at'] ?? null;
+			if ( $finished_at ) {
+				$date = date( 'Y-m-d H:i:s', strtotime( $finished_at ) );
+				$args['post_date']     = $date;
+				$args['post_date_gmt'] = get_gmt_from_date( $date );
+			}
+		}
 	} else {
 		// Store ISBN as accessible meta for future dedup queries.
 		if ( ! isset( $args['meta_input'] ) ) {

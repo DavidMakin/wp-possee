@@ -571,6 +571,93 @@ function possee_sanitize_micropub( $args ) {
 	return $args;
 }
 
+/*
+ * Micropub: route read-of posts to 'books' CPT, with ISBN dedup.
+ */
+
+add_filter( 'micropub_post_type', 'possee_micropub_book_post_type', 10, 2 );
+function possee_micropub_book_post_type( $post_type, $input ) {
+	if ( isset( $input['properties']['read-of'] ) || isset( $input['properties']['read-status'] ) ) {
+		return 'book';
+	}
+	return $post_type;
+}
+
+add_filter( 'micropub_suggest_title', 'possee_micropub_book_slug', 10, 2 );
+function possee_micropub_book_slug( $title, $props ) {
+	if ( ! isset( $props['read-of'][0]['properties']['name'][0] ) ) {
+		return $title;
+	}
+	return $props['read-of'][0]['properties']['name'][0];
+}
+
+add_filter( 'pre_insert_micropub_post', 'possee_micropub_book_deduplicate' );
+function possee_micropub_book_deduplicate( $args ) {
+	if ( ! isset( $args['meta_input']['mf2_read-of'] ) ) {
+		return $args;
+	}
+
+	$read_of = $args['meta_input']['mf2_read-of'];
+	if ( ! is_array( $read_of ) || empty( $read_of ) ) {
+		return $args;
+	}
+
+	$item  = $read_of[0];
+	$props = isset( $item['properties'] ) ? $item['properties'] : array();
+
+	// Set post_title from the book name inside read-of.
+	if ( isset( $props['name'][0] ) && empty( $args['post_title'] ) ) {
+		$args['post_title'] = $props['name'][0];
+	}
+
+	// Set post_content from summary if no content.
+	if ( isset( $args['post_excerpt'] ) && empty( $args['post_content'] ) ) {
+		$args['post_content'] = $args['post_excerpt'];
+	}
+
+	// Extract ISBN for dedup.
+	if ( ! isset( $props['uid'][0] ) ) {
+		return $args;
+	}
+
+	$uid = $props['uid'][0];
+	if ( strpos( $uid, 'isbn:' ) !== 0 && strpos( $uid, 'ISBN:' ) !== 0 ) {
+		return $args;
+	}
+
+	$isbn = substr( $uid, 5 );
+
+	// Check for existing book with this ISBN.
+	$existing = get_posts( array(
+		'post_type'        => 'book',
+		'post_status'      => 'any',
+		'meta_key'         => 'isbn',
+		'meta_value'       => $isbn,
+		'fields'           => 'ids',
+		'posts_per_page'   => 1,
+		'update_meta_cache' => false,
+		'no_found_rows'    => true,
+	) );
+
+	if ( ! empty( $existing ) ) {
+		// Short-circuit — book already exists.
+		$args['ID'] = $existing[0];
+	} else {
+		// Store ISBN as accessible meta for future dedup queries.
+		if ( ! isset( $args['meta_input'] ) ) {
+			$args['meta_input'] = array();
+		}
+		$args['meta_input']['isbn'] = $isbn;
+
+		// Store author as accessible meta.
+		if ( isset( $props['author'][0] ) ) {
+			$args['meta_input']['book_author'] = $props['author'][0];
+		}
+	}
+
+	return $args;
+}
+
 add_filter( 'post_class', 'possee_add_hentry_class' );
 function possee_add_hentry_class( $classes ) {
 	$classes[] = 'h-entry';

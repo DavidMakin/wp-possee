@@ -13,7 +13,7 @@ See **[VOICE.md](./VOICE.md)** for the author's tone, patterns to use, and patte
 - **Cloudflared** (Cloudflare Tunnel — no open ports)
 - **MariaDB** (external container on `db` network, shared with other services)
 - **Theme**: Blocksy + Blocksy Companion (font/color/typography configured via Customizer GUI — do not override in mu-plugin)
-- **mu-plugins**: `microformats.php`, `comments.php`, `theme-styles.php`, `loopback-fix.php`, `post-types.php` (server-only), `books.php` (server-only), `pretty-archives.php` (server-only), `header-items/` (server-only), `homepage-highlights.php` (server-only)
+- **mu-plugins**: `microformats.php`, `comments.php`, `theme-styles.php`, `loopback-fix.php`, `post-types.php` (server-only), `books.php` (server-only — but tracked in repo to prevent drift; always edit locally then deploy), `pretty-archives.php` (server-only), `header-items/` (server-only), `homepage-highlights.php` (server-only)
 
 ## Critical: WP-CLI invocation
 
@@ -49,7 +49,7 @@ Note: alpine `grep` has no `--include` flag. Use `-r` with a path instead.
 
 ## Deploy workflow
 
-1. Edit files locally under `mu-plugins/`
+1. Edit files locally under `mu-plugins/` — **never edit files only on the server**. Server-only changes are overwritten on next deploy and lost.
 2. `scp` to server: `scp mu-plugins/foo.php homeip:/Storage/docker/wp-possee/mu-plugins/`
 3. **PHP changes** — restart the wordpress container to clear OPcache: `ssh homeip docker compose -f /Storage/docker/wp-possee/docker-compose.yml up -d --force-recreate wordpress`
 4. **Clear nginx cache**: `ssh homeip docker compose -f /Storage/docker/wp-possee/docker-compose.yml up -d --force-recreate nginx`
@@ -239,6 +239,47 @@ Custom post types: `book`, `checkin`, `note`.
 | `semantic-linkbacks` | `get_linkbacks()` builds meta_query with `type__not_in` for mentions |
 | `webmention` | `class-comment-walker.php` overwrites `type__not_in` at priority 10; sender hooks `publish_post` |
 
+## n8n automation
+
+An **n8n** instance runs on the server (container name `n8n`, volume `n8n_n8n_data`). It automatically imports books from Hardcover to WordPress.
+
+### "Hardcover → WordPress (finished books)" workflow
+
+| Property | Value |
+|---|---|
+| Workflow ID | `hardcover-to-wordpress` (used as PK in SQLite) |
+| Schedule | Every hour, at minute 0 |
+| Trigger | `scheduleTrigger` |
+| State | Active |
+| DB file | `/var/lib/docker/volumes/n8n_n8n_data/_data/database.sqlite` |
+
+**Flow:**
+1. **Every hour** — hourly schedule trigger
+2. **Get last checked time** — reads `$getWorkflowStaticData('global').lastChecked`
+3. **Query Hardcover GraphQL** — `POST https://api.hardcover.app/v1/graphql` with query for `user_books` where `status_id = 3` (finished) and `updated_at > lastChecked`
+4. **Build Micropub payloads** — maps GraphQL response to Micropub h-entry format
+5. **Any new books?** — IF node: true → POST to Micropub → update lastChecked; false → stop
+6. **POST to Micropub** — `POST https://blog.sleep-er.co.uk/wp-json/micropub/1.0/endpoint`
+7. **Update last checked time** — sets `workflowStaticData.lastChecked = new Date().toISOString()`
+
+**⚠️ `lastChecked` stuck bug**: The "Update last checked time" node is on the TRUE branch (only runs when books are found). When 0 results come back, `lastChecked` never advances. The `workflow_entity.staticData` column in the DB may not reflect runtime value — n8n may cache it in memory.
+
+**Micropub payload includes:**
+- `summary`, `read-status: finished`
+- `read-of` (h-cite with `name`, `author`, `uid` = ISBN)
+- `hardcover-cover` (cover image URL)
+- `finished-at` (used to set `post_date` on dedup)
+- `hardcover-slug` (Hardcover book slug — used for "View on Hardcover" link)
+- `book-series`, `book-series-position`
+
+**Modifying the workflow:**
+The workflow is stored in SQLite at `/var/lib/docker/volumes/n8n_n8n_data/_data/database.sqlite`, table `workflow_entity`, column `nodes` (JSON). To modify it:
+- Use `sqlite3` to read/write the `nodes` JSON directly
+- Or access the n8n API within the Docker network (port 5678)
+- The workflow is versioned (see `workflow_history` table); if you break it, revert from there
+
+**N8N API key** (for UI/API access when needed): stored in `user_api_keys` table.
+
 ## Backups
 
 ```bash
@@ -251,7 +292,7 @@ ssh homeip docker exec mariadb mysqldump -u wordpress -pGlimmer-Ripeness3-Diffus
 - Follow **Conventional Commits**: `<type>(<scope>): <summary>`
 - Types: `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `chore`, `style`
 - Subject ≤50 chars, imperative mood, no trailing period
-- **One commit = one thing**: one feature, one fix, one chore — never bundle unrelated changes
+- **One commit = one thing**: one feature, one fix, one chore — never bundle unrelated changes. A single change can span multiple files (e.g. PHP + CSS for the same feature), but don't mix distinct changes in one commit.
 - Body only when the *why* isn't obvious; wrap at 72 chars
 - No AI attribution, no "this commit does X", no emoji
 
@@ -259,7 +300,9 @@ ssh homeip docker exec mariadb mysqldump -u wordpress -pGlimmer-Ripeness3-Diffus
 
 - **Never set `font-family` in mu-plugin CSS** — Blocksy Customizer owns typography. Exception: `monospace` for code elements.
 - **Never run multi-line commands over `ssh homeip` without `bash << 'EOF' ... EOF`** — remote shell is fish, which breaks bash heredocs and quoting.
-- **Never edit mu-plugin files directly on the server** — edit locally under `mu-plugins/`, then `scp` and restart. Direct edits are overwritten on next deploy.
+- **Never edit mu-plugin files directly on the server** — edit locally under `mu-plugins/`, then `scp` and restart. Direct edits are overwritten on next deploy and lost.
+- **Never make CSS/PHP changes only on the server** — files tracked in this repo (`mu-plugins/`) must always be edited locally first, then deployed. Server-only changes are silently overwritten on the next deploy and lost.
+- **Never modify n8n workflows only on the server without documenting in AGENTS.md** — workflow changes (GraphQL queries, code nodes, Micropub payloads) are stored in SQLite and have no local backup. Document all changes here.
 - **Never skip clearing all three caches after a PHP change** — OPcache, nginx fastcgi cache, and WP-Optimize disk cache are independent. Missing one means stale output with no obvious cause.
 - **Never omit `--user 65532` from WP-CLI containers** — the uploads directory is owned by that UID; omitting it silently breaks any file write including `media_sideload_image`.
 - **Never use `$post->post_excerpt` to check for a native excerpt** — use `has_excerpt($post_id)`, which checks the raw DB value. Our `get_the_excerpt` filter can return non-empty strings even when no native excerpt exists, causing Blocksy's hero to render generated content as a description.

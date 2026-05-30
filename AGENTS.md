@@ -13,7 +13,7 @@ See **[VOICE.md](./VOICE.md)** for the author's tone, patterns to use, and patte
 - **Cloudflared** (Cloudflare Tunnel — no open ports)
 - **MariaDB** (external container on `db` network, shared with other services)
 - **Theme**: Blocksy + Blocksy Companion (font/color/typography configured via Customizer GUI — do not override in mu-plugin)
-- **mu-plugins**: `microformats.php`, `comments.php`, `theme-styles.php`, `loopback-fix.php`
+- **mu-plugins**: `microformats.php`, `comments.php`, `theme-styles.php`, `loopback-fix.php`, `post-types.php` (server-only), `books.php` (server-only), `pretty-archives.php` (server-only), `header-items/` (server-only), `homepage-highlights.php` (server-only)
 
 ## Critical: WP-CLI invocation
 
@@ -159,6 +159,8 @@ Do not set `font-family` in mu-plugin CSS — Blocksy's Customizer handles it. T
 - `get_the_excerpt` (priority 5): for checkin posts on archive pages, uses full content (stripped of HTML) as excerpt instead of `blocksy_trim_excerpt`'s truncated version
 - `blocksy:archive:render-card-layers` (priority 10): injects static map image at end of excerpt card for posts with `checkin` tag and geo coordinates
 
+**⚠️ Checkin tag requirement**: All checkin header/map rendering in this file is gated on `has_tag('checkin')`. If a checkin post lacks that tag, the header block, map image, venue, coins, and "Added via OwnYourSwarm" footer will not render. The `checkin` CPT MUST have `post_tag` taxonomy registered (see `post-types.php`) — otherwise `wp_insert_post` silently drops `tags_input` from Micropub requests.
+
 **Syndication content handling**
 - `the_content` (priority 999): strips syndication-links div HTML from non-singular views
 - `syn_link_mapping`: maps `hachyderm.io` → `mastodon` icon
@@ -207,6 +209,17 @@ Comment & webmention handling extracted from microformats.php for clarity.
 - `get_comment_text` (priority 13): suppresses "Bridgy Response" text for like-type webmentions
 - `get_comment_text` (priority 13): appends ` (via Mastodon)` or ` (via Bluesky)` to webmention comments based on `webmention_source_url` meta
 - `webmention_comment_data` (priority 22): marks Bridgy Fed `bsky.app` self-comments as spam
+
+### `post-types.php` (server-only)
+
+Custom post types: `book`, `checkin`, `note`.
+
+- Registers CPTs with custom rewrite rules (`/checkins/<date>/<slug>/`, `/notes/<date>-<time>/`, `/books/<slug>/`)
+- `micropub_post_type` filter: routes `category:['book']` → `book`, `checkin` category → `checkin`, fallback → `note`
+- `pre_insert_micropub_post` (priority 5): sets post slug per CPT convention; for books, also sets `post_date` from `mf2_finished-at`
+- `possee_enable_cpt_plugin_support`: registers `post_tag` taxonomy for all three CPTs (otherwise `wp_insert_post` silently drops `tags_input`)
+
+**⚠️ Checkin tag gotcha**: The checkin header/map rendering in `microformats.php` (`possee_checkin_header`, `possee_checkin_excerpt`, etc.) is gated on `has_tag('checkin')`. If the `checkin` CPT loses `post_tag` taxonomy registration, new checkins from OwnYourSwarm will not get the `checkin` tag and the header block won't render. The Micropub plugin sets `tags_input: ['checkin']` from `category: ['checkin']`, but `wp_insert_post` silently discards `tags_input` when the taxonomy isn't registered for the post type.
 
 ### `loopback-fix.php`
 - WordPress loopback HTTPS requests fail inside Docker because `wp_safe_remote_get()` resolves the public domain to the nginx container's private IP (rejected as unsafe).

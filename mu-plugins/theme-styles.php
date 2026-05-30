@@ -258,14 +258,16 @@ table thead th:first-child {
 	color: #999;
 }
 
-.is-book-post .book-card--single .book-hardcover-link {
+.is-book-post .book-card--single .book-hardcover-link,
+.is-book-post .book-card--single .book-ol-link {
 	font-size: 0.85rem;
 	color: #5c7cfa;
 	text-decoration: none;
 	margin-top: 0.15rem;
 }
 
-.is-book-post .book-card--single .book-hardcover-link:hover {
+.is-book-post .book-card--single .book-hardcover-link:hover,
+.is-book-post .book-card--single .book-ol-link:hover {
 	text-decoration: underline;
 }
 
@@ -276,9 +278,9 @@ table thead th:first-child {
 	align-items: flex-start;
 }
 
-.book-archive-row .book-cover {
+.book-archive-row .book-archive-cover {
 	flex-shrink: 0;
-	width: 48px;
+	width: 96px;
 }
 
 .book-archive-row .book-cover-img {

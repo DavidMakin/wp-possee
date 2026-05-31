@@ -312,3 +312,15 @@ function possee_note_type_badge( $outputs, $prefix, $featured_image_args ) {
 	return $outputs;
 }
 
+/**
+ * Notes must never have a title — empty string in the DB.
+ * Catches all paths: Micropub, REST API, auto-drafts.
+ */
+add_filter( 'wp_insert_post_data', 'possee_note_blank_title', 10, 2 );
+function possee_note_blank_title( $data, $postarr ) {
+	if ( 'note' === ( $data['post_type'] ?? '' ) ) {
+		$data['post_title'] = '';
+	}
+	return $data;
+}
+

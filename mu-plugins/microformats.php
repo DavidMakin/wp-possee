@@ -90,6 +90,33 @@ add_action( 'plugins_loaded', function () {
 	}
 }, 20 );
 
+/**
+ * Notes have no title and syndicated copies lack a link back.
+ * Give Bridgy explicit content with the permalink so Mastodon
+ * and Bluesky posts include a "blog.sleep-er.co.uk" link.
+ */
+add_action( 'wp_footer', 'possee_note_bridgy_content' );
+function possee_note_bridgy_content() {
+	if ( ! is_singular( 'note' ) ) {
+		return;
+	}
+	$post        = get_queried_object();
+	$permalink   = esc_url( get_permalink( $post ) );
+	$content_raw = get_post_field( 'post_content', $post );
+	$content     = esc_html( wp_trim_words( strip_tags( $content_raw ), 55 ) );
+
+	printf(
+		'<p class="p-bridgy-mastodon-content" style="display:none">%s %s</p>' . "\n",
+		$content,
+		$permalink
+	);
+	printf(
+		'<p class="p-bridgy-bluesky-content" style="display:none">%s %s</p>' . "\n",
+		$content,
+		$permalink
+	);
+}
+
 add_filter( 'blocksy:options:meta:meta_default_elements', 'possee_register_meta_defaults' );
 function possee_register_meta_defaults( $elements ) {
 	$elements[] = array(

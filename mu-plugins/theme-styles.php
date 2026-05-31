@@ -333,6 +333,48 @@ table thead th:first-child {
 	vertical-align: middle;
 }
 
+/* ── Book archive: year heading ──────────────────────────── */
+.book-year-heading {
+	font-size: 1.4rem;
+	font-weight: 700;
+	color: #555;
+	margin: 0 0 1rem;
+	padding: 0 0 0.4rem;
+	border-bottom: 1px solid #ddd;
+	width: 100%;
+	letter-spacing: 0.02em;
+}
+
+/* ── Book archive: status filter bar ─────────────────────── */
+.book-filter-bar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5em;
+	margin-bottom: 1.5rem;
+}
+
+.book-filter {
+	display: inline-block;
+	padding: 0.35em 0.9em;
+	font-size: 0.85rem;
+	font-weight: 600;
+	text-decoration: none;
+	border-radius: 20px;
+	color: #666;
+	background: #f0f0f0;
+	transition: background .2s, color .2s;
+}
+
+.book-filter:hover {
+	background: #e0e0e0;
+	color: #333;
+}
+
+.book-filter--active {
+	background: #5c7cfa;
+	color: #fff;
+}
+
 /* ── Book progress bar ────────────────────────────────────── */
 .book-progress {
 	height: 6px;
@@ -614,12 +656,14 @@ table thead th:first-child {
 }
 
 .possee-highlights__label span {
-	font-size: 0.75rem;
+	display: block;
+	font-size: 1.1rem;
 	font-weight: 600;
-	letter-spacing: 0.08em;
+	letter-spacing: 0.06em;
 	text-transform: uppercase;
 	color: #6b7a99;
 	text-align: center;
+	line-height: 1.35;
 }
 
 .possee-highlights .card-content > * {

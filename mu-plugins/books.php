@@ -33,6 +33,12 @@ function possee_book_get_data( $post_id ) {
 	}
 
 	$hc_cover = $possee_meta( 'mf2_hardcover-cover' ) ?? '';
+	if ( ! $hc_cover ) {
+		$hc_slug = $possee_meta( 'mf2_hardcover-slug' );
+		if ( $hc_slug ) {
+			$hc_cover = possee_book_fetch_hc_cover( $post_id, $hc_slug );
+		}
+	}
 
 	$progress_pages = null;
 	$progress_total = null;
@@ -68,6 +74,33 @@ function possee_book_get_data( $post_id ) {
 	}
 
 	return compact( 'title', 'author', 'isbn', 'uid', 'status', 'rating', 'hc_cover', 'progress_pages', 'progress_total', 'progress_pct', 'finished_at', 'series_name', 'series_pos' );
+}
+
+function possee_book_fetch_hc_cover( $post_id, $hc_slug ) {
+	$existing = get_post_meta( $post_id, 'mf2_hardcover-cover', true );
+	if ( $existing ) {
+		return $existing;
+	}
+
+	// Only attempt lookup once per post.
+	if ( get_post_meta( $post_id, '_hc_cover_lookup_done', true ) ) {
+		return '';
+	}
+
+	$url     = 'https://hardcover.app/oembed?url=' . rawurlencode( 'https://hardcover.app/books/' . $hc_slug ) . '&format=json';
+	$resp    = wp_remote_get( $url, array( 'timeout' => 5 ) );
+
+	if ( ! is_wp_error( $resp ) && wp_remote_retrieve_response_code( $resp ) === 200 ) {
+		$data = json_decode( wp_remote_retrieve_body( $resp ), true );
+		if ( ! empty( $data['thumbnail_url'] ) ) {
+			update_post_meta( $post_id, 'mf2_hardcover-cover', $data['thumbnail_url'] );
+			update_post_meta( $post_id, '_hc_cover_lookup_done', 1 );
+			return $data['thumbnail_url'];
+		}
+	}
+
+	update_post_meta( $post_id, '_hc_cover_lookup_done', 1 );
+	return '';
 }
 
 function possee_book_cover_url( $isbn, $size = 'M' ) {
@@ -173,6 +206,8 @@ function possee_book_year_heading_script() {
 	</script>
 	<?php
 }
+
+
 
 
 function possee_book_stars_html( $rating ) {

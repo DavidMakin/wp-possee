@@ -1,33 +1,160 @@
 <?php
 defined( 'SYNDICATION_LINKS_BRIDGY_WEBMENTION' ) || define( 'SYNDICATION_LINKS_BRIDGY_WEBMENTION', 1 );
 
+/**
+ * Delay Bridgy publish webmentions sent during Micropub post creation.
+ *
+ * When a post is created via Micropub (Quill etc.), Syndication Links fires
+ * the Bridgy webmention immediately — before nginx/Cloudflare/WP-Optimize
+ * caches have the page ready. Bridgy fetches a stale page, can't find the
+ * u-syndication link, and caches the failure. Subsequent retries return the
+ * same error without re-fetching (Bridgy deduplicates on source+target).
+ *
+ * Fix: hook micropub_syndication at priorities 1 and 99 to bracket Syndication
+ * Links (priority 10). At priority 1, install a pre_http_request filter that
+ * intercepts outbound requests to brid.gy/publish/* and returns a fake
+ * response, blocking the actual send. At priority 99, remove the filter, clean
+ * up any error log entries written by Syndication Links, and schedule the real
+ * send 90 seconds later via WP-Cron — by which time caches are warm.
+ */
+
+/** UIDs of Bridgy providers we want to delay. */
+define( 'POSSEE_BRIDGY_UIDS', array( 'webmention-bluesky-bridgy', 'webmention-mastodon-bridgy' ) );
+
+/** Whether we are currently inside a micropub_syndication call. */
+$GLOBALS['possee_in_micropub_syndication'] = false;
+
+add_action( 'micropub_syndication', 'possee_micropub_syndication_start', 1, 2 );
+function possee_micropub_syndication_start( $post_id, $syndicate_to ) {
+	$pending = array_intersect( $syndicate_to, POSSEE_BRIDGY_UIDS );
+	if ( empty( $pending ) ) {
+		return;
+	}
+	$GLOBALS['possee_in_micropub_syndication'] = array(
+		'post_id'     => $post_id,
+		'pending'     => array_values( $pending ),
+		'intercepted' => array(),
+	);
+	add_filter( 'pre_http_request', 'possee_intercept_bridgy_request', 1, 3 );
+}
+
+add_action( 'micropub_syndication', 'possee_micropub_syndication_end', 99, 2 );
+function possee_micropub_syndication_end( $post_id, $syndicate_to ) {
+	if ( ! $GLOBALS['possee_in_micropub_syndication'] ) {
+		return;
+	}
+	remove_filter( 'pre_http_request', 'possee_intercept_bridgy_request', 1 );
+
+	$ctx         = $GLOBALS['possee_in_micropub_syndication'];
+	$intercepted = $ctx['intercepted'];
+	$GLOBALS['possee_in_micropub_syndication'] = false;
+
+	if ( empty( $intercepted ) ) {
+		return;
+	}
+
+	// Syndication Links wrote a WP_Error log entry because our fake interception
+	// caused endpoint discovery to return null (no webmention link found in response).
+	// Remove those entries — the real send will write its own when cron fires.
+	$log     = get_post_meta( $post_id, 'syndication_log', true ) ?: array();
+	$new_log = array_filter( $log, function ( $entry ) use ( $intercepted ) {
+		return ! in_array( $entry['uid'] ?? '', $intercepted, true );
+	} );
+	update_post_meta( $post_id, 'syndication_log', array_values( $new_log ) );
+
+	// Schedule the real send 90 seconds later.
+	wp_schedule_single_event( time() + 90, 'possee_bridgy_delayed', array( $post_id, $intercepted ) );
+}
+
+/**
+ * Intercept outbound HTTP requests to brid.gy/publish/* and return a fake 202.
+ * Records which Bridgy UID was intercepted so we can schedule it for real later.
+ */
+function possee_intercept_bridgy_request( $preempt, $args, $url ) {
+	if ( strpos( $url, 'brid.gy/publish' ) === false ) {
+		return $preempt;
+	}
+	// Identify which provider this is for.
+	$uid = null;
+	if ( strpos( $url, '/bluesky' ) !== false ) {
+		$uid = 'webmention-bluesky-bridgy';
+	} elseif ( strpos( $url, '/mastodon' ) !== false ) {
+		$uid = 'webmention-mastodon-bridgy';
+	}
+	if ( $uid && is_array( $GLOBALS['possee_in_micropub_syndication'] ) ) {
+		$GLOBALS['possee_in_micropub_syndication']['intercepted'][] = $uid;
+	}
+	// Return a fake 202 Accepted so Syndication Links doesn't log an error.
+	return array(
+		'headers'  => array( 'content-type' => 'application/json' ),
+		'body'     => '{"status":"deferred"}',
+		'response' => array( 'code' => 202, 'message' => 'Accepted' ),
+		'cookies'  => array(),
+		'filename' => null,
+	);
+}
+
+add_action( 'possee_bridgy_delayed', 'possee_bridgy_delayed_handler', 10, 2 );
+function possee_bridgy_delayed_handler( $post_id, $syndicate_to ) {
+	do_action( 'syn_syndication', $post_id, $syndicate_to );
+}
+
+add_filter( 'pre_insert_micropub_post', 'possee_log_micropub_payload', 1 );
+function possee_log_micropub_payload( $params ) {
+	$log_file = WP_CONTENT_DIR . '/micropub-log.json';
+	$entry    = array(
+		'time'   => gmdate( 'c' ),
+		'params' => $params,
+	);
+	file_put_contents( $log_file, json_encode( $entry, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . "\n---\n", FILE_APPEND | LOCK_EX );
+	return $params;
+}
 
 add_action( 'wp_head', 'possee_wp_head_microformats' );
 function possee_wp_head_microformats() {
 	echo '<link rel="me" href="https://hachyderm.io/@_sleeper" />' . "\n";
 	echo '<link rel="me" href="https://bsky.app/profile/sleep-er.bsky.social" />' . "\n";
+	echo '<meta name="theme-color" content="#263959" />' . "\n";
+
+	$site_name = esc_attr( get_bloginfo( 'name' ) );
+	$locale    = esc_attr( str_replace( '-', '_', get_locale() ) );
 
 	if ( is_singular( 'post' ) ) {
 		$post        = get_queried_object();
-		$title       = esc_attr( get_the_title( $post ) );
+		$title       = esc_attr( strip_tags( get_the_title( $post ) ) );
 		$url         = esc_url( get_permalink( $post ) );
-		$description = esc_attr( has_excerpt( $post ) ? get_the_excerpt( $post ) : wp_trim_words( strip_tags( $post->post_content ), 30 ) );
+		$description = esc_attr( strip_tags( has_excerpt( $post ) ? get_the_excerpt( $post ) : wp_trim_words( strip_tags( $post->post_content ), 30 ) ) );
 
-		$image = '';
+		$image      = '';
+		$img_width  = 0;
+		$img_height = 0;
+		$img_alt    = $title;
+
 		if ( 'book' === $post->post_type ) {
 			$book_data = possee_book_get_data( $post->ID );
 			if ( $book_data ) {
 				if ( $book_data['isbn'] ) {
-					$image = possee_book_cover_url( $book_data['isbn'], 'L' );
+				$image = possee_book_cover_url( $book_data['isbn'], 'L' );
+				$img_width  = 180;
+				$img_height = 270;
+					$img_alt    = esc_attr( $book_data['title'] . ' cover' );
 				} elseif ( ! empty( $book_data['hc_cover'] ) ) {
-					$image = $book_data['hc_cover'];
+					$image   = $book_data['hc_cover'];
+					$img_alt = esc_attr( $book_data['title'] . ' cover' );
 				}
 			}
 		}
 		if ( ! $image && has_post_thumbnail( $post ) ) {
-			$src = wp_get_attachment_image_src( get_post_thumbnail_id( $post ), 'large' );
+			$thumb_id = get_post_thumbnail_id( $post );
+			$src      = wp_get_attachment_image_src( $thumb_id, 'full' );
 			if ( $src ) {
-				$image = esc_url( $src[0] );
+				$image      = esc_url( $src[0] );
+				$img_width  = (int) $src[1];
+				$img_height = (int) $src[2];
+				$alt_text   = get_post_meta( $thumb_id, '_wp_attachment_image_alt', true );
+				if ( $alt_text ) {
+					$img_alt = esc_attr( $alt_text );
+				}
 			}
 		}
 		if ( ! $image ) {
@@ -35,30 +162,89 @@ function possee_wp_head_microformats() {
 			if ( $logo_id ) {
 				$src = wp_get_attachment_image_src( $logo_id, 'full' );
 				if ( $src ) {
-					$image = esc_url( $src[0] );
+					$image      = esc_url( $src[0] );
+					$img_width  = (int) $src[1];
+					$img_height = (int) $src[2];
 				}
 			}
 		}
 
+		$published = esc_attr( get_the_date( 'c', $post ) );
+		$modified  = esc_attr( get_the_modified_date( 'c', $post ) );
+		$author    = esc_attr( get_the_author_meta( 'display_name', $post->post_author ) );
+
+		echo '<meta name="description" content="' . $description . '" />' . "\n";
 		echo '<meta property="og:type" content="article" />' . "\n";
+		echo '<meta property="og:site_name" content="' . $site_name . '" />' . "\n";
+		echo '<meta property="og:locale" content="' . $locale . '" />' . "\n";
 		echo '<meta property="og:title" content="' . $title . '" />' . "\n";
 		echo '<meta property="og:url" content="' . $url . '" />' . "\n";
 		echo '<meta property="og:description" content="' . $description . '" />' . "\n";
+		echo '<meta property="article:published_time" content="' . $published . '" />' . "\n";
+		echo '<meta property="article:modified_time" content="' . $modified . '" />' . "\n";
 		if ( $image ) {
 			echo '<meta property="og:image" content="' . $image . '" />' . "\n";
+			if ( $img_width && $img_height ) {
+				echo '<meta property="og:image:width" content="' . $img_width . '" />' . "\n";
+				echo '<meta property="og:image:height" content="' . $img_height . '" />' . "\n";
+			}
+			echo '<meta property="og:image:alt" content="' . $img_alt . '" />' . "\n";
 		}
-		echo '<meta name="twitter:card" content="' . ( $image ? 'summary_large_image' : 'summary' ) . '" />' . "\n";
+		$card_type = $image && $img_width >= 600 ? 'summary_large_image' : 'summary';
+		echo '<meta name="twitter:card" content="' . $card_type . '" />' . "\n";
+		echo '<meta name="twitter:site" content="@_sleeper" />' . "\n";
+		echo '<meta name="twitter:title" content="' . $title . '" />' . "\n";
+		echo '<meta name="twitter:description" content="' . $description . '" />' . "\n";
+		if ( $image ) {
+			echo '<meta name="twitter:image" content="' . $image . '" />' . "\n";
+			echo '<meta name="twitter:image:alt" content="' . $img_alt . '" />' . "\n";
+		}
+
+		$ld = array(
+			'@context'         => 'https://schema.org',
+			'@type'            => 'Article',
+			'headline'         => strip_tags( get_the_title( $post ) ),
+			'url'              => get_permalink( $post ),
+			'datePublished'    => get_the_date( 'c', $post ),
+			'dateModified'     => get_the_modified_date( 'c', $post ),
+			'author'           => array(
+				'@type' => 'Person',
+				'name'  => get_the_author_meta( 'display_name', $post->post_author ),
+				'url'   => get_author_posts_url( $post->post_author ),
+			),
+			'publisher'        => array(
+				'@type' => 'Organization',
+				'name'  => get_bloginfo( 'name' ),
+				'url'   => home_url( '/' ),
+			),
+			'description'      => strip_tags( has_excerpt( $post ) ? get_the_excerpt( $post ) : wp_trim_words( strip_tags( $post->post_content ), 30 ) ),
+		);
+		if ( $image ) {
+			$ld['image'] = $image;
+		}
+		echo '<script type="application/ld+json">' . wp_json_encode( $ld, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . '</script>' . "\n";
+
 	} elseif ( is_front_page() || is_home() ) {
+		$description = esc_attr( get_bloginfo( 'description' ) );
+		echo '<meta name="description" content="' . $description . '" />' . "\n";
 		echo '<meta property="og:type" content="website" />' . "\n";
-		echo '<meta property="og:title" content="' . esc_attr( get_bloginfo( 'name' ) ) . '" />' . "\n";
+		echo '<meta property="og:site_name" content="' . $site_name . '" />' . "\n";
+		echo '<meta property="og:locale" content="' . $locale . '" />' . "\n";
+		echo '<meta property="og:title" content="' . $site_name . '" />' . "\n";
 		echo '<meta property="og:url" content="' . esc_url( home_url( '/' ) ) . '" />' . "\n";
-		echo '<meta property="og:description" content="' . esc_attr( get_bloginfo( 'description' ) ) . '" />' . "\n";
+		echo '<meta property="og:description" content="' . $description . '" />' . "\n";
+		echo '<meta name="twitter:card" content="summary" />' . "\n";
+		echo '<meta name="twitter:site" content="@_sleeper" />' . "\n";
+
 	} elseif ( is_archive() ) {
-		$title       = esc_attr( get_the_archive_title() );
+		$title       = esc_attr( strip_tags( get_the_archive_title() ) );
 		$description = esc_attr( strip_tags( get_the_archive_description() ) );
+		echo '<meta property="og:type" content="website" />' . "\n";
+		echo '<meta property="og:site_name" content="' . $site_name . '" />' . "\n";
+		echo '<meta property="og:locale" content="' . $locale . '" />' . "\n";
+		echo '<meta property="og:title" content="' . $title . '" />' . "\n";
 		if ( $description ) {
-			echo '<meta property="og:type" content="website" />' . "\n";
-			echo '<meta property="og:title" content="' . $title . '" />' . "\n";
+			echo '<meta name="description" content="' . $description . '" />' . "\n";
 			echo '<meta property="og:description" content="' . $description . '" />' . "\n";
 		}
 	}
@@ -85,8 +271,20 @@ add_action( 'plugins_loaded', function () {
 		}
 
 		public function wp_footer() {
+			// Always output p-bridgy-bluesky-content so Bridgy uses this text
+			// rather than parsing e-content (which may contain metadata or footers).
+			// Only on singular posts — no need on archives/feeds.
+			if ( ! is_singular() ) {
+				return;
+			}
 			if ( ( 1 === (int) get_option( 'syndication_use_excerpt' ) ) && has_excerpt() ) {
-				printf( '<p class="p-bridgy-bluesky-content" style="display:none">%1$s</p>', get_the_excerpt() ); // phpcs:ignore
+				$text = get_the_excerpt();
+			} else {
+				$text = wp_strip_all_tags( get_the_content() );
+				$text = trim( $text );
+			}
+			if ( $text ) {
+				printf( '<p class="p-bridgy-bluesky-content" style="display:none">%s</p>', esc_html( $text ) ); // phpcs:ignore
 			}
 		}
 
@@ -398,6 +596,28 @@ function possee_remove_sloc_content_on_checkin() {
 	remove_filter( 'the_content', array( 'Geo_Data', 'content_map' ), 11 );
 	remove_filter( 'the_content', array( 'Geo_Data', 'location_content' ), 12 );
 	remove_filter( 'the_content', array( 'Micropub\Render', 'render_content' ), 1 );
+}
+
+// Micropub's render_content wraps content in <div class="e-content"> — we do that
+// ourselves in possee_wrap_econtent, so suppress it on all singular posts.
+add_action( 'wp', 'possee_remove_micropub_render' );
+function possee_remove_micropub_render() {
+	if ( ! is_singular() ) {
+		return;
+	}
+	// Try both array form (namespaced class) and string form.
+	remove_filter( 'the_content', array( 'Micropub\Render', 'render_content' ), 1 );
+	remove_filter( 'the_content', 'Micropub\Render::render_content', 1 );
+}
+
+// Belt-and-suspenders: remove Micropub's e-content wrapper at the start of the
+// content filter chain on singular posts, right before it would fire at priority 1.
+add_filter( 'the_content', 'possee_suppress_micropub_econtent', 0 );
+function possee_suppress_micropub_econtent( $content ) {
+	if ( is_singular() && class_exists( 'Micropub\Render' ) ) {
+		remove_filter( 'the_content', array( 'Micropub\Render', 'render_content' ), 1 );
+	}
+	return $content;
 }
 
 add_filter( 'the_content', 'possee_checkin_header', 5 );
@@ -738,7 +958,7 @@ function possee_wrap_econtent( $content ) {
 		. '<time class="dt-published" datetime="' . esc_attr( $iso ) . '">' . esc_html( $iso ) . '</time>'
 		. '<a class="u-url" href="' . esc_url( $permalink ) . '">' . esc_html( $permalink ) . '</a>'
 		. '</div>';
-	return '<div class="e-content">' . $hidden . $content . '</div>';
+	return $hidden . '<div class="e-content">' . $content . '</div>';
 }
 
 add_filter( 'the_content', 'possee_venue_recent_checkins', 20 );

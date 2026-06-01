@@ -12,6 +12,63 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Convert OwnYourSwarm coin Webmentions into post meta instead of comments.
+ *
+ * Each coin arrives as a separate Webmention h-entry authored by "Swarm"
+ * (swarmapp.com) with a p-swarm-coins value. We accumulate them into:
+ *   swarm_score_total  (int)
+ *   swarm_score_items  (array of {points, icon, message})
+ * and then delete the comment so coins never appear in the comment thread.
+ */
+add_action( 'wp_insert_comment', 'possee_absorb_swarm_coin_webmention', 10, 2 );
+function possee_absorb_swarm_coin_webmention( $comment_id, $comment ) {
+	// Must be from swarmapp.com author URL.
+	if ( strpos( $comment->comment_author_url, 'swarmapp.com' ) === false ) {
+		return;
+	}
+
+	// Must have a p-swarm-coins meta value.
+	$points = (int) get_comment_meta( $comment_id, 'p-swarm-coins', true );
+	if ( ! $points ) {
+		return;
+	}
+
+	$post_id = (int) $comment->comment_post_ID;
+	if ( ! $post_id ) {
+		return;
+	}
+
+	// Icon is the comment author avatar (stored by Webmention plugin as comment_author_email or meta).
+	$icon = get_comment_meta( $comment_id, 'avatar', true );
+	if ( ! $icon ) {
+		// Semantic Linkbacks stores it differently — fall back to author photo meta.
+		$icon = get_comment_meta( $comment_id, 'semantic_linkbacks_author_photo', true );
+	}
+	if ( ! $icon ) {
+		$icon = 'https://ss1.4sqi.net/img/points/coin_icon_coin.png';
+	}
+
+	$message = wp_strip_all_tags( $comment->comment_content );
+
+	// Append to swarm_score_items.
+	$items   = get_post_meta( $post_id, 'swarm_score_items', true );
+	$items   = is_array( $items ) ? $items : array();
+	$items[] = array(
+		'points'  => $points,
+		'icon'    => $icon,
+		'message' => $message,
+	);
+	update_post_meta( $post_id, 'swarm_score_items', $items );
+
+	// Update running total.
+	$total = (int) get_post_meta( $post_id, 'swarm_score_total', true );
+	update_post_meta( $post_id, 'swarm_score_total', $total + $points );
+
+	// Remove the comment — coins are not human replies.
+	wp_delete_comment( $comment_id, true );
+}
+
 add_filter( 'get_comments_number', 'possee_get_comments_number', 10, 2 );
 function possee_get_comments_number( $count, $post_id ) {
 	if ( ! $post_id ) {

@@ -305,6 +305,33 @@ table thead th:first-child {
 	text-decoration: underline;
 }
 
+/* ── Note single: Simple Location map + location ──────────────── */
+/* Notes have geo data from Quill — make the map a compact thumbnail,
+   not a full-width 1024px behemoth. The note content is the focus. */
+.single-note .sloc-map {
+	display: block;
+	max-width: 320px;
+	width: 100%;
+	height: auto;
+	aspect-ratio: 4/3;
+	object-fit: cover;
+	border-radius: 6px;
+	border: 1px solid #ddd;
+	box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+	margin: 1em 0 0.4em;
+}
+.single-note .sloc-display {
+	font-size: 0.85em;
+	color: #777;
+	line-height: 1.5;
+}
+.single-note .sloc-display .sloc-weather {
+	display: inline;
+}
+.single-note .sloc-display .sloc-temperature {
+	display: inline;
+}
+
 /* ── Checkin card: map thumbnail (no featured image) ──────────── */
 .entry-card .sloc-map-thumb {
 	display: block;

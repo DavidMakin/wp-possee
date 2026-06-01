@@ -160,255 +160,28 @@ table thead th:first-child {
 	box-shadow: 0 4px 40px rgba(0,0,0,0.6);
 }
 
-/* Note photo galleries — smaller images with lightbox */
-.single-note .gallery {
-	max-width: 420px;
-	margin: 1em 0;
-}
-.single-note .gallery .gallery-icon a {
-	cursor: zoom-in;
-	display: inline-block;
-	line-height: 0;
-}
-.single-note .gallery .gallery-icon img {
-	height: auto;
-	border-radius: 4px;
-	border: 1px solid #eee;
-	box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-}
-
-/* ── Book single: card layout ──────────────────────────────── */
-.is-book-post .book-card--single {
-	display: flex;
-	gap: 1.5rem;
-	margin: 1.5em 0;
-	padding: 1.25rem;
-	background: #f9f9f9;
-	border: 1px solid #e0e0e0;
-	border-radius: 8px;
-	box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-}
-
-.is-book-post .book-card--single .u-read-of.h-cite {
-	display: flex;
-	gap: 1.5rem;
-	width: 100%;
-}
-
-.is-book-post .book-card--single .book-cover {
-	flex-shrink: 0;
-	width: 120px;
-}
-
-.is-book-post .book-card--single .book-cover-img {
-	display: block;
-	width: 100%;
-	height: auto;
-	border-radius: 4px;
-	box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-}
-
-.is-book-post .book-card--single .book-meta {
-	flex: 1;
-	display: flex;
-	flex-direction: column;
-	gap: 0.35rem;
-}
-
-.is-book-post .book-card--single .book-title {
-	font-size: 1.25rem;
-	font-weight: 700;
-	color: #222;
-	line-height: 1.3;
-}
-
-.is-book-post .book-card--single .book-author {
-	font-size: 0.95rem;
-	color: #666;
-}
-
-.is-book-post .book-card--single .book-status {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.3em;
-	font-size: 0.85rem;
-	font-weight: 600;
-	padding: 0.2em 0.6em;
-	border-radius: 4px;
-	width: fit-content;
-	margin-top: 0.15rem;
-}
-
-.is-book-post .book-card--single .book-status--finished {
-	background: #e5f6df;
-	color: #2e7d32;
-}
-
-.is-book-post .book-card--single .book-status--reading {
-	background: #fff3e0;
-	color: #e65100;
-}
-
-.is-book-post .book-card--single .book-status-icon {
-	vertical-align: middle;
-}
-
-.is-book-post .book-card--single .book-date {
-	font-size: 0.85rem;
-	color: #999;
-}
-
-.is-book-post .book-card--single .book-hardcover-link,
-.is-book-post .book-card--single .book-ol-link {
-	font-size: 0.85rem;
-	color: #5c7cfa;
-	text-decoration: none;
-	margin-top: 0.15rem;
-}
-
-.is-book-post .book-card--single .book-hardcover-link:hover,
-.is-book-post .book-card--single .book-ol-link:hover {
-	text-decoration: underline;
-}
-
-/* ── Book archive card: row layout ────────────────────────── */
-.book-archive-row {
-	display: flex;
-	gap: 0.75rem;
-	align-items: flex-start;
-}
-
-.book-archive-row .book-archive-cover {
-	flex-shrink: 0;
-	width: 96px;
-}
-
-.book-archive-row .book-cover-img {
-	display: block;
-	width: 100%;
-	height: auto;
-	border-radius: 3px;
-	box-shadow: 0 1px 3px rgba(0,0,0,0.12);
-}
-
-.book-archive-row .book-archive-info {
-	flex: 1;
-	display: flex;
-	flex-direction: column;
-	gap: 0.15rem;
-}
-
-.book-archive-row .book-title {
-	font-size: 0.95rem;
-	font-weight: 600;
-	color: #333;
-}
-
-.book-archive-row .book-author {
-	font-size: 0.8rem;
-	color: #888;
-}
-
-.book-archive-row .book-status {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.25em;
-	font-size: 0.75rem;
-	padding: 0.1em 0.4em;
-	border-radius: 3px;
-	width: fit-content;
-}
-
-.book-archive-row .book-status--finished {
-	background: #e5f6df;
-	color: #2e7d32;
-}
-
-.book-archive-row .book-status--reading {
-	background: #fff3e0;
-	color: #e65100;
-}
-
-.book-archive-row .book-status-icon {
-	vertical-align: middle;
-}
-
-/* ── Book archive: year heading ──────────────────────────── */
-.book-year-heading {
-	font-size: 1.4rem;
-	font-weight: 700;
-	color: #555;
-	margin: 0 0 1rem;
-	padding: 0 0 0.4rem;
-	border-bottom: 1px solid #ddd;
-	width: 100%;
-	letter-spacing: 0.02em;
-}
-
-/* ── Book archive: status filter bar ─────────────────────── */
-.book-filter-bar {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.5em;
-	margin-bottom: 1.5rem;
-}
-
-.book-filter {
-	display: inline-block;
-	padding: 0.35em 0.9em;
-	font-size: 0.85rem;
-	font-weight: 600;
-	text-decoration: none;
-	border-radius: 20px;
-	color: #666;
-	background: #f0f0f0;
-	transition: background .2s, color .2s;
-}
-
-.book-filter:hover {
-	background: #e0e0e0;
-	color: #333;
-}
-
-.book-filter--active {
-	background: #5c7cfa;
-	color: #fff;
-}
-
-/* ── Book progress bar ────────────────────────────────────── */
-.book-progress {
-	height: 6px;
-	background: #e0e0e0;
-	border-radius: 3px;
-	overflow: hidden;
-	margin: 0.5em 0;
-}
-
-.book-progress-bar {
-	height: 100%;
-	background: #5c7cfa;
-	border-radius: 3px;
-}
-
-/* Bluesky-style likes facepile — compact, small round avatars */
-.likes {
+/* Bluesky-style likes/reposts facepile — compact, small round avatars */
+.likes,
+.reposts {
 	margin: 1.5em 0;
 	display: flex;
 	align-items: center;
 	gap: 0.4em;
 }
 
-/* Likes inside archive cards — tighter spacing */
-.entry-card .likes {
+.entry-card .likes,
+.entry-card .reposts {
 	margin: 0.5em 0 0.3em;
 	line-height: 1;
 }
 
-.likes h3 {
+.likes h3,
+.reposts h3 {
 	display: none;
 }
 
-.likes .mention-list {
+.likes .mention-list,
+.reposts .mention-list {
 	display: inline-flex;
 	align-items: center;
 	padding: 0;
@@ -416,20 +189,24 @@ table thead th:first-child {
 	list-style: none;
 }
 
-.likes .mention-list li {
+.likes .mention-list li,
+.reposts .mention-list li {
 	margin: 0 0 0 -8px;
 }
 
-.likes .mention-list li:first-child {
+.likes .mention-list li:first-child,
+.reposts .mention-list li:first-child {
 	margin-left: 0;
 }
 
-.likes .mention-list li a {
+.likes .mention-list li a,
+.reposts .mention-list li a {
 	display: block;
 	line-height: 0;
 }
 
-.likes .mention-list li img {
+.likes .mention-list li img,
+.reposts .mention-list li img {
 	width: 28px;
 	height: 28px;
 	border-radius: 50%;
@@ -470,47 +247,8 @@ table thead th:first-child {
 	cursor: pointer;
 }
 
-/* also restyle reposts section to match */
 .reposts {
 	margin: 0.5em 0;
-	display: flex;
-	align-items: center;
-	gap: 0.4em;
-}
-
-.reposts h3 {
-	display: none;
-}
-
-.reposts .mention-list {
-	display: inline-flex;
-	align-items: center;
-	padding: 0;
-	margin: 0;
-	list-style: none;
-}
-
-.reposts .mention-list li {
-	margin: 0 0 0 -8px;
-}
-
-.reposts .mention-list li:first-child {
-	margin-left: 0;
-}
-
-.reposts .mention-list li a {
-	display: block;
-	line-height: 0;
-}
-
-.reposts .mention-list li img {
-	width: 28px;
-	height: 28px;
-	border-radius: 50%;
-	border: 2px solid #fff;
-	object-fit: cover;
-	display: block;
-	background: #f0f0f0;
 }
 
 /* Tighten comments section spacing — higher specificity to override Blocksy external CSS */
@@ -565,33 +303,6 @@ table thead th:first-child {
 
 .checkin-excerpt a:hover {
 	text-decoration: underline;
-}
-
-/* ── Note single: Simple Location map + location ──────────────── */
-/* Notes have geo data from Quill — make the map a compact thumbnail,
-   not a full-width 1024px behemoth. The note content is the focus. */
-.single-note .sloc-map {
-	display: block;
-	max-width: 320px;
-	width: 100%;
-	height: auto;
-	aspect-ratio: 4/3;
-	object-fit: cover;
-	border-radius: 6px;
-	border: 1px solid #ddd;
-	box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-	margin: 1em 0 0.4em;
-}
-.single-note .sloc-display {
-	font-size: 0.85em;
-	color: #777;
-	line-height: 1.5;
-}
-.single-note .sloc-display .sloc-weather {
-	display: inline;
-}
-.single-note .sloc-display .sloc-temperature {
-	display: inline;
 }
 
 /* ── Checkin card: map thumbnail (no featured image) ──────────── */
@@ -683,14 +394,12 @@ table thead th:first-child {
 }
 
 .possee-highlights__label span {
-	display: block;
-	font-size: 1.1rem;
+	font-size: 0.75rem;
 	font-weight: 600;
-	letter-spacing: 0.06em;
+	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: #6b7a99;
 	text-align: center;
-	line-height: 1.35;
 }
 
 .possee-highlights .card-content > * {
@@ -893,6 +602,29 @@ table thead th:first-child {
 	white-space: nowrap;
 }
 
+/* Post type badge — notes on homepage/archive */
+.post-type-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3em;
+	margin-bottom: 0.4em;
+	line-height: 1;
+}
+
+.post-type-badge--note {
+	color: #1a6fa8;
+	font-size: 0.75em;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+
+</style>
+	<?php
+}, 5 );
+
+add_action( 'wp_head', function () { ?>
+<style>
 /* Post counts header widget */
 .ct-header-post-counts .post-counts-list {
 	display: flex;
@@ -942,22 +674,237 @@ table thead th:first-child {
 	opacity: 0.8;
 	color: var(--theme-link-hover-color);
 }
+</style>
+	<?php
+}, 6 );
 
-/* Post type badge — notes on homepage/archive */
-.post-type-badge {
+add_action( 'wp_head', function () {
+	if ( ! is_singular( 'book' ) && ! is_post_type_archive( 'book' ) && ! is_home() && ! is_search() ) {
+		return;
+	}	?>
+<style>
+.is-book-post .page-description {
+	display: none;
+}
+
+.book-card {
+	display: flex;
+}
+
+.book-card .h-cite {
+	display: flex;
+	gap: 1.25rem;
+	align-items: flex-start;
+}
+
+.book-cover {
+	flex-shrink: 0;
+}
+
+.ct-media-container--book {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: #e8e4df;
+	overflow: hidden;
+	max-height: 220px;
+}
+
+.book-home-cover {
+	width: auto;
+	height: auto;
+	max-height: 220px;
+	max-width: 100%;
+	object-fit: contain;
+	display: block;
+}
+
+.book-cover-img {
+	display: block;
+	border-radius: 4px;
+	box-shadow: 2px 4px 12px rgba(0,0,0,0.18);
+}
+
+.book-card--single .book-cover-img {
+	width: 140px;
+}
+
+.book-card--archive .book-cover-img {
+	width: 80px;
+}
+
+.book-archive-row {
+	display: flex;
+	gap: 1rem;
+	align-items: flex-start;
+}
+
+.book-archive-cover {
+	flex-shrink: 0;
+}
+
+.book-archive-cover .book-cover-img {
+	width: 80px;
+	height: auto;
+	display: block;
+	border-radius: 3px;
+	box-shadow: 2px 3px 8px rgba(0,0,0,0.18);
+}
+
+.book-archive-info {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3em;
+}
+
+.book-archive-title {
+	font-weight: 700;
+	font-size: 1.05em;
+	line-height: 1.3;
+	color: var(--theme-text-color);
+	text-decoration: none;
+}
+
+.book-archive-title:hover {
+	color: var(--theme-link-hover-color);
+}
+
+.book-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3em;
+}
+
+.book-title {
+	font-size: 1.15em;
+	font-weight: 700;
+	color: var(--theme-text-color);
+	line-height: 1.3;
+}
+
+.book-author {
+	color: #666;
+	font-size: 0.95em;
+}
+
+.book-series {
+	display: block;
+	font-size: 0.78em;
+	color: #888;
+	font-style: italic;
+	margin-top: 0.1em;
+}
+.book-series-position {
+	font-style: normal;
+	font-weight: 600;
+}
+
+.book-status {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.3em;
-	margin-bottom: 0.4em;
+	font-size: 0.75em;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: #999;
+	margin-top: 0.2em;
+}
+
+.book-status--finished {
+	background: #2e7d32;
+	color: #fff;
+	padding: 0.2em 0.55em 0.2em 0.4em;
+	border-radius: 999px;
+	align-self: flex-start;
+}
+.book-status--finished .book-status-icon {
+	stroke: #fff;
+	flex-shrink: 0;
+}
+.book-status--to-read    { color: #2196f3; }
+.book-status--reading,
+.book-status--inprogress { color: #ff9800; }
+
+.book-progress {
+	width: 100%;
+	max-width: 200px;
+	margin-top: 0.4em;
+	height: 5px;
+	background: #e0e0e0;
+	border-radius: 999px;
+}
+.book-progress-bar {
+	height: 5px;
+	background: #ff9800;
+	border-radius: 999px;
+	transition: width 0.3s ease;
+}
+
+.book-date {
+	font-size: 0.8em;
+	color: #999;
+}
+
+.checkin-by-date {
+	color: #aaa;
+	font-size: 0.9em;
+}
+
+.book-rating {
+	display: inline-flex;
+	gap: 1px;
+	font-size: 1.1em;
 	line-height: 1;
 }
 
-.post-type-badge--note {
-	color: #1a6fa8;
-	font-size: 0.75em;
+.star-full  { color: #f5a623; }
+.star-empty { color: #ccc; }
+
+.book-card--single {
+	margin-bottom: 1.5rem;
+}
+
+.book-card--archive {
+	padding: 0.5rem 0;
+}
+
+.book-hardcover-link,
+.book-ol-link {
+	font-size: 0.8em;
+	color: #888;
+}
+
+/* Live search — CPT type icons */
+.ct-search-item .ct-media-container img[src^="data:image/svg"] {
+	background: #f5f5f5;
+	padding: 18%;
+	box-sizing: border-box;
+	object-fit: contain;
+}
+
+/* Book archive: rating slightly larger and bolder for readability */
+.book-archive-info .book-rating {
+	font-size: 1.2em;
+}
+
+.book-archive-info .star-full {
+	color: #e6951a;
+}
+
+/* Year headings on /books/ archive */
+.book-year-heading {
+	grid-column: 1 / -1;
+	font-size: 1.1em;
 	font-weight: 700;
+	color: #555;
+	letter-spacing: 0.08em;
 	text-transform: uppercase;
-	letter-spacing: 0.06em;
+	margin: 0.4em 0 0;
+	padding: 0.55em 1em;
+	background: #ffffff;
+	border-radius: 10px;
+	box-shadow: 0 1px 1px 0 rgba(31, 35, 46, 0.15);
 }
 
 /* Status filter bar on /books/ archive */
@@ -998,7 +945,7 @@ table thead th:first-child {
 }
 </style>
 	<?php
-}, 5 );
+}, 6 );
 
 add_action( 'wp_footer', function () {
 	?>
@@ -1036,40 +983,34 @@ add_action( 'wp_footer', function () {
 			var img = el.querySelector('img');
 			if (!img) return;
 			triggerEl = el;
-			openLightbox(img);
+			var src = img.src;
+			if (img.srcset) {
+				var parts = img.srcset.split(',').map(function (s) { return s.trim().split(/\s+/); });
+				var best = parts.reduce(function (a, b) {
+					return (parseFloat(b[1]) > parseFloat(a[1])) ? b : a;
+				});
+				if (best[0]) src = best[0];
+			}
+			overlayImg.src = src;
+			overlayImg.alt = img.alt;
+			overlay.classList.add('blx-open');
+			document.body.style.overflow = 'hidden';
+			setTimeout(function () { overlay.focus(); }, 50);
 		});
 	});
 
-	// Open on click of gallery images inside note/checkin content
-	document.querySelectorAll(
-		'.single-note .entry-content .gallery-icon a, ' +
-		'.single-checkin .entry-content .gallery-icon a, ' +
-		'.single-post .entry-content .gallery-icon a'
-	).forEach(function (el) {
-		el.addEventListener('click', function (e) {
-			e.preventDefault();
-			var img = el.querySelector('img');
-			if (!img) return;
-			triggerEl = el;
-			openLightbox(img);
+	// Open on click of book cover on single book pages
+	document.querySelectorAll('.is-book-post .book-card--single .book-cover-img').forEach(function (img) {
+		img.addEventListener('click', function () {
+			if (!img.src || img.src === window.location.href) return;
+			triggerEl = img;
+			overlayImg.src = img.dataset.coverFallback || img.src;
+			overlayImg.alt = img.alt;
+			overlay.classList.add('blx-open');
+			document.body.style.overflow = 'hidden';
+			setTimeout(function () { overlay.focus(); }, 50);
 		});
 	});
-
-	function openLightbox(img) {
-		var src = img.src;
-		if (img.srcset) {
-			var parts = img.srcset.split(',').map(function (s) { return s.trim().split(/\s+/); });
-			var best = parts.reduce(function (a, b) {
-				return (parseFloat(b[1]) > parseFloat(a[1])) ? b : a;
-			});
-			if (best[0]) src = best[0];
-		}
-		overlayImg.src = src;
-		overlayImg.alt = img.alt;
-		overlay.classList.add('blx-open');
-		document.body.style.overflow = 'hidden';
-		setTimeout(function () { overlay.focus(); }, 50);
-	}
 
 	// Close on click or Escape
 	overlay.addEventListener('click', close);

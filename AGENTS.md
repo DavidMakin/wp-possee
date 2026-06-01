@@ -1,10 +1,82 @@
 # AGENTS.md — wp-possee
 
-Operational knowledge for AI agents working on this repo. Read before touching anything.
+Operational knowledge for AI agents. Read before touching anything.
+
+## Lessons learned (read before touching Blocksy or WP-CLI)
+
+### CPT card consistency rule
+
+CPT cards on the homepage (`is_home()`) **must render identically** to their standalone archive pages (`/books/`, `/notes/`, `/checkins/`, etc.). Never branch on `is_home()` to render a simpler or different card layout for a CPT. If a CPT needs a custom card, implement it once and let it run everywhere — homepage, archive, and search.
+
+### Blocksy CPT card layout
+
+- CPT card layout key: `{cpt}_archive_archive_order` (double `archive` — e.g. `note_archive_archive_order`). Not `{cpt}_archive_order`.
+- Key absent from DB → Blocksy silently falls back to hardcoded default with `read_more` disabled. Customizer settings ignored. Fix: copy `blog_archive_order` into CPT key via `set_theme_mod`.
+- Titleless post types (e.g. `note`) → Blocksy skips `read_more` slot entirely. Inject manually via `blocksy:archive:render-card-layers`, check `empty($outputs['read_more'])` first.
+- Before assuming `set_theme_mod()` write took effect, verify exact key name Blocksy reads at runtime — no warnings on wrong key.
+
+### Homepage vs archive card rendering
+
+- Don't branch on `is_home()`. Same code path everywhere, suppress unwanted slots. Branching = two code paths + easy-to-miss filter interactions (e.g. excerpt filters).
+
+### WP-CLI quoting over SSH
+
+- **Never** embed multi-line PHP in `ssh homeip "bash -c '...'"`. Quoting breaks silently. Always: write PHP to local file → `scp` to server → `wp eval-file /tmp/file.php`. No exceptions beyond single short expressions.
+
+### Bridgy Publish failure: "Couldn't find link to brid.gy/publish/bluesky"
+
+- **Root cause**: Syndication Links fires the Bridgy webmention synchronously during the Micropub HTTP request — before nginx/Cloudflare/WP-Optimize caches have a warm copy of the page. Bridgy fetches stale content, fails, and **caches the failure** keyed on source+target URL pair. Subsequent resends of the same webmention return the cached error without re-fetching.
+- **Diagnosis**: Check `syndication_log` post meta. A `status: 400` entry for `webmention-bluesky-bridgy` with message `"Couldn't find link to brid.gy/publish/bluesky"` confirms this.
+- **One-off recovery**: Send the webmention with a cache-busting query param on the source URL — Bridgy treats it as a new source+target pair and re-fetches:
+  ```bash
+  curl -X POST https://brid.gy/publish/webmention \
+    -d "source=https://blog.sleep-er.co.uk/YOUR-POST-URL/?v=2&target=https://brid.gy/publish/bluesky"
+  ```
+  Then update `mf2_syndication` post meta to replace `https://brid.gy/publish/bluesky` with the returned Bluesky URL, and add a success entry to `syndication_log`.
+- **Permanent fix**: `microformats.php` intercepts `micropub_syndication` at priorities 1 and 99, uses `pre_http_request` to block the immediate Bridgy send, and schedules `possee_bridgy_delayed` cron for 90 seconds later. Do not remove this — it prevents the race condition on every future Micropub post.
+- **Docker network**: WordPress container is on the `db` network (not `wp-possee_internal`). WP-CLI throwaway containers need `--network db`.
+
+### Verifying PHP changes: bypass Cloudflare cache
+
+The public domain goes through Cloudflare, which caches responses with `s-maxage=3600` (1 hour). Fetching the public URL after a PHP change will often return a stale cached page — `cf-cache-status: HIT` in response headers confirms this. **Never use the public URL to verify PHP output changes.** Fetch directly from nginx via the internal Docker network instead:
+
+```bash
+ssh homeip bash << 'EOF'
+docker run --rm \
+  --network wp-possee_wp-possee \
+  alpine:latest \
+  wget -q -O - --header="Host: blog.sleep-er.co.uk" "http://nginx/your/path/" 2>&1
+EOF
+```
+
+This bypasses Cloudflare, nginx fastcgi cache (which is reset on container recreate), and WP-Optimize disk cache (cleared separately). Use it any time `curl https://blog.sleep-er.co.uk/...` isn't reflecting your changes.
+
+### Micropub `render_content` and `e-content` nesting
+
+Micropub plugin's `Render::render_content` hooks `the_content` at **priority 1**. For any post with `micropub_version` meta set (all Micropub-posted content) and no `mf2_content` meta, it wraps the post content in `<div class="e-content">`. This runs before our `possee_wrap_econtent` at priority 20, causing **nested `e-content` divs**.
+
+- `remove_filter( 'the_content', array( 'Micropub\Render', 'render_content' ), 1 )` in a `wp` action hook does not reliably remove it — the filter stays registered.
+- Do not try to regex-strip the inner `e-content` wrapper inside `possee_wrap_econtent` — Micropub's `generate_post_content` may emit other content before/after the `e-content` div (interactions, gallery shortcodes).
+- The working approach: accept the nesting and ensure `p-bridgy-bluesky-content` is always emitted so Bridgy uses that instead of parsing `e-content`.
+
+### Bridgy Bluesky content: always emit `p-bridgy-bluesky-content`
+
+Bridgy reads the `e-content` microformat value to determine what to post to Bluesky. The `e-content` div includes all inner text — including the `dt-published` ISO timestamp, `u-url`, "Added via Quill" footers, and Micropub-generated wrappers. This makes Bluesky posts start with the ISO timestamp and URL.
+
+**Fix**: `SynProvider_Webmention_Bridgy_Bluesky::wp_footer()` always emits `<p class="p-bridgy-bluesky-content" style="display:none">` on singular posts. Bridgy treats this as authoritative and ignores `e-content`. The text is `wp_strip_all_tags(get_the_content())` — raw post text with no metadata or footers.
+
+**Hidden microformat div placement**: `possee_wrap_econtent` must return `$hidden . '<div class="e-content">' . $content . '</div>'` (hidden div BEFORE the e-content opening tag, not inside it). If the hidden div is inside `e-content`, its ISO timestamp text is included in what Bridgy reads.
+
+### Blog post drafting
+
+- Read VOICE.md and fetch 2–3 existing published posts via WP-CLI before writing. Style is specific; generic "developer voice" is noticeably wrong.
+- Gutenberg headings need `class="wp-block-heading"` or render oddly in editor.
+- Cross-links: use `/?p=ID` format. Permanent regardless of permalink structure.
+- Excerpts: 1–2 sentences stating the specific thing reader will learn. Not a tease.
 
 ## Writing blog posts
 
-See **[VOICE.md](./VOICE.md)** for the author's tone, patterns to use, and patterns to avoid. Read it before writing or editing any post content.
+See **[VOICE.md](./VOICE.md)** for tone, patterns to use, and patterns to avoid. Read before writing or editing any post content.
 
 ## Stack
 
@@ -12,12 +84,12 @@ See **[VOICE.md](./VOICE.md)** for the author's tone, patterns to use, and patte
 - **Nginx** (FastCGI cache + gzip, reverse proxy to PHP-FPM)
 - **Cloudflared** (Cloudflare Tunnel — no open ports)
 - **MariaDB** (external container on `db` network, shared with other services)
-- **Theme**: Blocksy + Blocksy Companion (font/color/typography configured via Customizer GUI — do not override in mu-plugin)
-- **mu-plugins**: `microformats.php`, `comments.php`, `theme-styles.php`, `loopback-fix.php`, `post-types.php` (server-only), `books.php` (server-only — but tracked in repo to prevent drift; always edit locally then deploy), `pretty-archives.php` (server-only), `header-items/` (server-only), `homepage-highlights.php` (server-only)
+- **Theme**: Blocksy + Blocksy Companion (font/color/typography via Customizer GUI — do not override in mu-plugin)
+- **mu-plugins**: `microformats.php`, `comments.php`, `themegf-styles.php`, `loopback-fix.php`, `books.php`, `post-types.php`
 
 ## Critical: WP-CLI invocation
 
-The WordPress container has no shell. Run WP-CLI in a throwaway container:
+WordPress container has no shell. Run WP-CLI in throwaway container:
 
 ```bash
 docker run --rm \
@@ -32,31 +104,29 @@ docker run --rm \
   wordpress:cli-php8.3 wp --allow-root <command>
 ```
 
-**`--user 65532` is mandatory** — uploads dir is owned by that UID. Omitting it breaks `media_sideload_image` and any file write.
+**`--user 65532` mandatory** — uploads dir owned by that UID. Omitting breaks `media_sideload_image` and any file write.
 
-**The mu-plugins bind mount is mandatory** — mu-plugins live at `/Storage/docker/wp-possee/mu-plugins/` on the host, not inside the named volume. Without the `-v` flag they won't load.
+**mu-plugins bind mount mandatory** — mu-plugins at `/Storage/docker/wp-possee/mu-plugins/` on host, not in named volume. Without `-v` they won't load.
 
-## Critical: inspecting files inside the container
-
-WordPress container has no shell. Read theme/plugin files via:
+## Critical: inspecting files inside container
 
 ```bash
 docker run --rm -v wp-possee_wp_data:/data alpine:latest cat /data/wp-content/...
 docker run --rm -v wp-possee_wp_data:/data alpine:latest grep -rn "pattern" /data/wp-content/...
 ```
 
-Note: alpine `grep` has no `--include` flag. Use `-r` with a path instead.
+Alpine `grep` has no `--include`. Use `-r` with path instead.
 
 ## Deploy workflow
 
-1. Edit files locally under `mu-plugins/` — **never edit files only on the server**. Server-only changes are overwritten on next deploy and lost.
-2. `scp` to server: `scp mu-plugins/foo.php homeip:/Storage/docker/wp-possee/mu-plugins/`
-3. **PHP changes** — restart the wordpress container to clear OPcache: `ssh homeip docker compose -f /Storage/docker/wp-possee/docker-compose.yml up -d --force-recreate wordpress`
+1. Edit locally under `mu-plugins/`
+2. `scp mu-plugins/foo.php homeip:/Storage/docker/wp-possee/mu-plugins/`
+3. **PHP changes** — restart wordpress container: `ssh homeip docker compose -f /Storage/docker/wp-possee/docker-compose.yml up -d --force-recreate wordpress`
 4. **Clear nginx cache**: `ssh homeip docker compose -f /Storage/docker/wp-possee/docker-compose.yml up -d --force-recreate nginx`
 5. **Purge WP-Optimize disk cache** (24h TTL, survives nginx restarts): `ssh homeip rm -rf $(docker volume inspect wp-possee_wp_data --format '{{.Mountpoint}}')/wp-content/cache/wpo-cache/`
-6. Wait ~65 seconds for OPcache to revalidate before testing (unless `opcache.revalidate_freq = 0`, in which case wait ~5s)
+6. Wait ~65s for OPcache revalidation (unless `opcache.revalidate_freq = 0`, then ~5s)
 
-Remote shell is **fish** — always use `ssh homeip bash << 'EOF' ... EOF` for multi-line commands.
+Remote shell is **fish** — use `ssh homeip bash << 'EOF' ... EOF` for multi-line commands.
 
 ## Infrastructure
 
@@ -68,12 +138,12 @@ Remote shell is **fish** — always use `ssh homeip bash << 'EOF' ... EOF` for m
 | Uploads owner UID | `65532` |
 | Ingress | Cloudflare Tunnel → nginx → PHP-FPM |
 | mu-plugins host path | `/Storage/docker/wp-possee/mu-plugins/` |
-| Named volume | `wp-possee_wp_data` (contains WP core, themes, plugins — not mu-plugins) |
+| Named volume | `wp-possee_wp_data` (WP core, themes, plugins — not mu-plugins) |
 | PHP INI | `php/uploads.ini` mounted into container (memory_limit=256M, OPcache, upload sizes) |
 
 ## PHP configuration (`php/uploads.ini`)
 
-- `opcache.revalidate_freq = 0` — file changes detected immediately (no 60s delay)
+- `opcache.revalidate_freq = 0` — file changes detected immediately
 - `opcache.validate_timestamps = 1`
 - `opcache.jit = tracing`, `opcache.jit_buffer_size = 64M`
 - `memory_limit = 256M`
@@ -81,19 +151,19 @@ Remote shell is **fish** — always use `ssh homeip bash << 'EOF' ... EOF` for m
 
 ## Blocksy: how customizer options work
 
-Blocksy stores card/meta layout in `blog_archive_order` theme mod. **This is persisted to the DB when the user saves the Customizer.** PHP filters only set defaults — they don't affect already-saved values.
+Blocksy stores card/meta layout in `blog_archive_order` theme mod. **Persisted to DB when user saves Customizer.** PHP filters only set defaults — don't affect already-saved values.
 
 ### Adding a new card element
 
-1. Filter `blocksy:options:posts-listing-archive-order` to add to the option's `value` and `settings` arrays (sets the default for fresh installs)
-2. **Also patch the stored DB value directly** via WP-CLI `set_theme_mod` — otherwise existing installs won't see the new element in the Customizer
+1. Filter `blocksy:options:posts-listing-archive-order` to add to `value` and `settings` arrays (default for fresh installs)
+2. **Also patch stored DB value** via `set_theme_mod` — existing installs won't see new element otherwise
 
 ### Adding an item inside Post Meta
 
 1. Filter `blocksy:options:meta:meta_default_elements` — adds to default value (fresh installs only)
-2. Filter `blocksy:options:meta:meta_elements` — adds the settings panel in Customizer
+2. Filter `blocksy:options:meta:meta_elements` — adds settings panel in Customizer
 3. Action `blocksy:post-meta:render-meta` — render `<li>` when `$id === 'your_id'`
-4. **Also patch the stored `blog_archive_order`** — find every `post_meta` item in the array and append your element to its `meta_elements` array
+4. **Also patch stored `blog_archive_order`** — find every `post_meta` item, append element to its `meta_elements` array
 
 ### Relevant filters
 
@@ -101,27 +171,61 @@ Blocksy stores card/meta layout in `blog_archive_order` theme mod. **This is per
 |---|---|
 | `blocksy:options:posts-listing-archive-order` | Card elements order + Customizer panels |
 | `blocksy:archive:render-card-layers` | Build `$outputs` array (fires once per card) |
-| `blocksy:archive:render-card-layer` | Render a single card element |
-| `blocksy:options:meta:meta_default_elements` | Default items in a post meta layer |
+| `blocksy:archive:render-card-layer` | Render single card element |
+| `blocksy:options:meta:meta_default_elements` | Default items in post meta layer |
 | `blocksy:options:meta:meta_elements` | Customizer settings panels for meta items |
-| `blocksy:post-meta:render-meta` | Render a single meta `<li>` item |
-| `blocksy:post-meta:items` | Filter the full `<ul>` HTML after rendering |
+| `blocksy:post-meta:render-meta` | Render single meta `<li>` item |
+| `blocksy:post-meta:items` | Filter full `<ul>` HTML after rendering |
 
 ### CSS quirks
 
-- Featured image on single posts has `aspect-ratio: 3/1` applied inline by Blocksy — images crop, not letterbox
-- Blocksy nginx + OPcache both cache; after mu-plugin changes clear both
+- Featured image on single posts: `aspect-ratio: 3/1` applied inline by Blocksy — images crop, not letterbox
+- Blocksy nginx + OPcache both cache; clear both after mu-plugin changes
 - `blocksy_trim_excerpt` strips HTML — can't inject HTML via `get_the_excerpt`
-- Blocksy enqueues its external CSS **after** `wp_head` inline `<style>`, so ID selectors are often needed to beat Blocksy's specificity
+- Blocksy enqueues external CSS **after** `wp_head` inline `<style>` — ID selectors often needed to beat specificity
 
-### filter priorities used
+### `blocksy:archive:render-card-layers` outputs for titleless CPTs
+
+Post type with no title (e.g. `note`) → Blocksy skips `read_more` slot — `$outputs['read_more']` absent. To inject standard button on CPT archive, set `$outputs['read_more']` explicitly:
+
+```php
+add_filter( 'blocksy:archive:render-card-layers', 'possee_note_read_more', 11, 3 );
+function possee_note_read_more( $outputs, $prefix, $args ) {
+    if ( get_post_type() !== 'note' || is_home() || is_feed() ) {
+        return $outputs;
+    }
+    if ( ! empty( $outputs['read_more'] ) ) {
+        return $outputs;
+    }
+    $outputs['read_more'] = sprintf(
+        '<a class="entry-button wp-element-button ct-button" href="%s">Read More<span class="screen-reader-text"> %s</span></a>',
+        esc_url( get_permalink() ),
+        esc_html( get_the_date( 'j M Y' ) )
+    );
+    return $outputs;
+}
+```
+
+**Only works if `read_more` enabled in archive order for that CPT.** Blocksy stores card layout per prefix: `blog_archive_order` for homepage, `{prefix}_archive_order` for CPT archives (e.g. `note_archive_archive_order`). CPT-specific key absent → hardcoded default with `read_more: enabled=false` — filter output ignored.
+
+Fix: copy `blog_archive_order` into CPT-specific key:
+```php
+set_theme_mod('note_archive_archive_order', get_theme_mod('blog_archive_order'));
+```
+
+Same fix needed for `checkin_archive_archive_order` and `book_archive_archive_order` — all three set in DB.
+
+**Do not** append to `$outputs['excerpt']` — puts link inside excerpt div, not Blocksy button slot, breaks when likes facepile injected after excerpt.
+
+### Filter priorities used
 
 | Filter | Priority | Reason |
 |---|---|---|
-| `the_content` (e-content wrapper) | 20 | Must run after Simple Location map at 11/12 |
+| `the_content` (e-content wrapper) | 20 | After Simple Location map at 11/12 |
 | `the_content` (syndication strip) | 999 | Must run last on non-singular |
 | `get_the_excerpt` (checkin) | 5 | Before default excerpt processing |
 | `blocksy:archive:render-card-layers` (checkin map) | 10 | Default |
+| `blocksy:archive:render-card-layers` (note read_more) | 11 | After checkin map at 10 |
 | `get_comment_text` (suppress "Bridgy Response") | 13 | Same priority as via label |
 | `get_comment_text` (via label) | 13 | Same priority as suppress |
 | `pre_get_comments` (save type__not_in) | 9 | Before Webmention plugin at 10 |
@@ -130,12 +234,12 @@ Blocksy stores card/meta layout in `blog_archive_order` theme mod. **This is per
 
 ## Fonts
 
-- **Body font**: Lato (loaded via Blocksy's local font system from `wp-content/uploads/fonts/`)
-- **Heading font**: Lato (set in Blocksy Customizer → Typography → Headings; weight 700)
-- **Page title font**: Lato (set in Blocksy Customizer per post-type)
-- **No Google Fonts API calls made** — fonts are downloaded and hosted locally by Blocksy
+- **Body font**: Lato (Blocksy local font system from `wp-content/uploads/fonts/`)
+- **Heading font**: Lato (Blocksy Customizer → Typography → Headings; weight 700)
+- **Page title font**: Lato (Blocksy Customizer per post-type)
+- **No Google Fonts API calls** — fonts downloaded and hosted locally by Blocksy
 
-Do not set `font-family` in mu-plugin CSS — Blocksy's Customizer handles it. The only exception is `monospace` for code elements (not available in the GUI).
+Don't set `font-family` in mu-plugin CSS — Blocksy Customizer owns it. Exception: `monospace` for code elements.
 
 ## mu-plugins: what each file does
 
@@ -143,40 +247,38 @@ Do not set `font-family` in mu-plugin CSS — Blocksy's Customizer handles it. T
 
 **IndieWeb microformats & meta tags**
 - `rel="me"` links in `<head>` for Mastodon (`@_sleeper@hachyderm.io`) + Bluesky (`sleep-er.bsky.social`)
-- OpenGraph (`og:title`, `og:description`, `og:image`, `og:url`) and Twitter Card meta tags on singular posts and front page
+- OpenGraph + Twitter Card meta tags on singular posts and front page
 - `h-entry` class on `post_class`, `p-name` span on singular titles
 
 **Bridgy Bluesky syndication provider**
 - Extends `SynProvider_Webmention_Bridgy` as `SynProvider_Webmention_Bridgy_Bluesky`
-- Registers the `webmention-bluesky-bridgy` provider for Syndication Links to push content to Bridgy Bluesky
-- Outputs hidden `.p-bridgy-bluesky-content` with excerpt for Bridgy to pick up
+- Registers `webmention-bluesky-bridgy` provider for Syndication Links
+- Outputs hidden `.p-bridgy-bluesky-content` on all singular posts with raw `wp_strip_all_tags(get_the_content())` — Bridgy uses this instead of parsing `e-content`, preventing timestamp/footer leakage
 
 **Syndication Links as Blocksy Card Element**
 - `reading_time` meta element: word-count → "N min read"
-- `syndication_links` meta element: renders syndication link icons inside post meta (`meta-syndication-links`)
+- `syndication_links` meta element: renders syndication link icons in post meta (`meta-syndication-links`)
 
 **Checkin posts**
-- `get_the_excerpt` (priority 5): for checkin posts on archive pages, uses full content (stripped of HTML) as excerpt instead of `blocksy_trim_excerpt`'s truncated version
-- `blocksy:archive:render-card-layers` (priority 10): injects static map image at end of excerpt card for posts with `checkin` tag and geo coordinates
-
-**⚠️ Checkin tag requirement**: All checkin header/map rendering in this file is gated on `has_tag('checkin')`. If a checkin post lacks that tag, the header block, map image, venue, coins, and "Added via OwnYourSwarm" footer will not render. The `checkin` CPT MUST have `post_tag` taxonomy registered (see `post-types.php`) — otherwise `wp_insert_post` silently drops `tags_input` from Micropub requests.
+- `get_the_excerpt` (priority 5): checkin posts on archive → full content (stripped HTML) as excerpt instead of `blocksy_trim_excerpt` truncation
+- `blocksy:archive:render-card-layers` (priority 10): injects static map image at end of excerpt card for posts with `checkin` tag + geo coordinates
 
 **Syndication content handling**
 - `the_content` (priority 999): strips syndication-links div HTML from non-singular views
 - `syn_link_mapping`: maps `hachyderm.io` → `mastodon` icon
-- `the_content` (priority 20): wraps singular post content in `<div class="e-content">` with hidden `dt-published`/`u-url` microformats; uses a static `$done` flag to prevent leaking hidden content when Syndication Links calls `apply_filters('the_content', ...)` a second time
+- `the_content` (priority 20): wraps singular content in `<div class="e-content">` with hidden `dt-published`/`u-url` placed **before** (not inside) the wrapper; static `$done` flag prevents double-wrapping when Syndication Links calls `apply_filters('the_content', ...)`
 
 **Category cleanup**
 - `get_the_terms`: hides Uncategorised/Uncategorized from display
 
 **Micropub post sanitisation**
-- `pre_insert_micropub_post`: sanitises tags array (filters non-strings), generates checkin post content from venue name/locality, sets `post-format-status`
+- `pre_insert_micropub_post`: sanitises tags array, generates checkin post content from venue name/locality, sets `post-format-status`
 
-**Named functions**: All hooks use named functions (`possee_*` prefix) for grepability and `remove_filter` support. The only remaining closure is in `plugins_loaded` (wraps a class definition).
+**Named functions**: All hooks use named functions (`possee_*` prefix) for grepability and `remove_filter` support. Only remaining closure is in `plugins_loaded` (wraps class definition).
 
 ### `theme-styles.php`
 
-All CSS values in this file are **not configurable via Blocksy Customizer** — they cover plugin integrations and custom features. Body/heading font/color was removed in favour of Blocksy GUI.
+CSS not configurable via Blocksy Customizer — plugin integrations and custom features only. Body/heading font/color handled by Blocksy GUI.
 
 | Feature | Description |
 |---|---|
@@ -184,64 +286,78 @@ All CSS values in this file are **not configurable via Blocksy Customizer** — 
 | `pre` styling | Light bg `#faf9f9`, rounded corners, auto-overflow, `pre-wrap` |
 | `pre code` | Reset inside pre blocks (no border, inherit color) |
 | `blockquote` | Left border `#263959`, italic, muted color `#ada8a8` |
-| `.entry-card` | Border-radius `10px`, subtle box-shadow, white bg, hover lift/shadow transition |
+| `.entry-card` | Border-radius `10px`, box-shadow, white bg, hover lift/shadow transition |
 | `.entry-meta` | Muted color `#a0a0a0`, `12px` font |
-| `table` | Simple bordered table with grey bg, striped even rows, gradient header |
+| `table` | Bordered, grey bg, striped even rows, gradient header |
 | `.meta-categories:empty` | Hide empty category display |
 | `.entry-card .syndication-links` | Hide syndication links inside cards |
 | `.meta-syndication-links` | Icon sizing: `1rem`, inline-flex |
 | Featured image lightbox | Click `.ct-featured-image` → overlay (`#blx-overlay`), vanilla JS, close on click/Escape |
-| `.likes` facepile | Bluesky-style: `28px` round avatars with `-8px` overlap, heart SVG label, `+N` overflow button |
+| `.likes` facepile | `28px` round avatars, `-8px` overlap, heart SVG label, `+N` overflow button |
 | `.reposts` facepile | Same style as `.likes` |
-| `#comments` | Tighter spacing: reduced margin/padding on titles, inner padding, comment-respond |
-| `.sloc-map-thumb` | Checkin map thumbnail: 4/3 aspect, `border: 1px solid #ddd`, subtle shadow |
+| `#comments` | Tighter spacing on titles, inner padding, comment-respond |
+| `.sloc-map-thumb` | Checkin map: 4/3 aspect, `border: 1px solid #ddd`, subtle shadow |
 
-**JS (injected via wp_footer)**: Adds heart SVG label to likes facepile, implements image lightbox (opens on `.ct-featured-image` click, closes on click or Escape).
+**JS (via wp_footer)**: Adds heart SVG to likes facepile, implements image lightbox.
 
 ### `comments.php`
 
-Comment & webmention handling extracted from microformats.php for clarity.
+Comment & webmention handling.
 
-- `get_comments_number` (priority 10): subtracts webmention-type comments (like, repost, mention) from the count shown to users
-- `pre_get_comments` (priority 9): saves original `type__not_in` before Webmention plugin overwrites it at priority 10
-- `pre_get_comments` (priority 11): restores `type__not_in` for `mention` queries (Semantic Linkbacks), or strips webmention types for `like`/`repost` queries
+- `get_comments_number` (priority 10): subtracts webmention-type comments from count shown to users
+- `pre_get_comments` (priority 9): saves original `type__not_in` before Webmention plugin overwrites at priority 10
+- `pre_get_comments` (priority 11): restores `type__not_in` for `mention` queries, or strips webmention types for `like`/`repost`
 - `semantic_linkbacks_enhance_comment_types`: adds `'like'` so Bridgy Bluesky likes get proper `semantic_linkbacks_type` meta
 - `get_comment_text` (priority 13): suppresses "Bridgy Response" text for like-type webmentions
-- `get_comment_text` (priority 13): appends ` (via Mastodon)` or ` (via Bluesky)` to webmention comments based on `webmention_source_url` meta
+- `get_comment_text` (priority 13): appends ` (via Mastodon)` or ` (via Bluesky)` based on `webmention_source_url` meta
 - `webmention_comment_data` (priority 22): marks Bridgy Fed `bsky.app` self-comments as spam
 
-### `post-types.php` (server-only)
-
-Custom post types: `book`, `checkin`, `note`.
-
-- Registers CPTs with custom rewrite rules (`/checkins/<date>/<slug>/`, `/notes/<date>-<time>/`, `/books/<slug>/`)
-- `micropub_post_type` filter: routes `category:['book']` → `book`, `checkin` category → `checkin`, fallback → `note`
-- `pre_insert_micropub_post` (priority 5): sets post slug per CPT convention; for books, also sets `post_date` from `mf2_finished-at`
-- `possee_enable_cpt_plugin_support`: registers `post_tag` taxonomy for all three CPTs (otherwise `wp_insert_post` silently drops `tags_input`)
-
-**⚠️ Checkin tag gotcha**: The checkin header/map rendering in `microformats.php` (`possee_checkin_header`, `possee_checkin_excerpt`, etc.) is gated on `has_tag('checkin')`. If the `checkin` CPT loses `post_tag` taxonomy registration, new checkins from OwnYourSwarm will not get the `checkin` tag and the header block won't render. The Micropub plugin sets `tags_input: ['checkin']` from `category: ['checkin']`, but `wp_insert_post` silently discards `tags_input` when the taxonomy isn't registered for the post type.
-
 ### `loopback-fix.php`
-- WordPress loopback HTTPS requests fail inside Docker because `wp_safe_remote_get()` resolves the public domain to the nginx container's private IP (rejected as unsafe).
+
+WordPress loopback HTTPS requests fail inside Docker — `wp_safe_remote_get()` resolves public domain to nginx container's private IP (rejected as unsafe).
+
 - `http_request_args` (priority 1): disables `reject_unsafe_urls` for requests to own domain
 - `pre_http_request` (priority 10): rewrites `https://domain` → `http://nginx`, sets `Host` header, retries with `wp_remote_request`
-- Uses a static `$in_progress` guard to prevent infinite recursion
+- Static `$in_progress` guard prevents infinite recursion
+
+### `books.php`
+
+Book display and Open Library cover fetching.
+
+- `possee_book_get_data($post_id)` — reads `mf2_read-of` (serialized h-cite) and `mf2_read-status` meta; extracts title, author, isbn (from `uid: isbn:XXXXX`), status, rating (parsed from excerpt `(N/5)` pattern)
+- `possee_book_cover_url($isbn, $size)` — `https://covers.openlibrary.org/b/isbn/{isbn}-{size}.jpg?default=false`; `?default=false` → 404 instead of blank placeholder
+- `possee_book_cover_img_html()` — `<img>` with SVG placeholder as `src`, real cover as `data-cover-src`; JS swaps on load
+- `possee_book_cover_loader_script()` — via `wp_footer`; swaps on `onload` (no `naturalWidth` check needed)
+- `possee_book_card_html($post_id, $data, $context)` — `context='single'`: 140px cover (L) + Hardcover + Open Library links; `context='archive'`: 80px cover (M)
+- `possee_book_stars_html($rating)` — renders `★`/`☆` with `aria-label`
+- `possee_is_book_post($post_id)` — true for `book` CPT or posts tagged `book`
+- `the_content` (priority 15): prepends book card on singular book views
+- `has_excerpt` filter: suppresses Blocksy hero excerpt on book posts
+- `blocksy:archive:render-card-layers` (priority 10): renders `book-archive-row` layout on all archives (homepage + `/books/`), replacing `title` and `excerpt` slots
+- `blocksy:archive:render-card-layer` (priority 10): suppresses `post_meta` layer on book CPT archive
+- `book-status--{slug}` CSS class drives status badge theming — if badge unstyled, deployed `books.php` is stale
+
+**Open Library attribution**: single book pages link to `https://openlibrary.org/isbn/{isbn}`. Rate limit: 100 req/IP/5 min.
+
+### `post-types.php`
+
+CPT registration and URL rewriting for `book`, `note`, `checkin`.
+
+- Notes have no title — Blocksy skips `read_more` slot on note archives. `possee_note_read_more` (priority 11) injects `entry-button` into `$outputs['read_more']` for non-home, non-feed note archives. Check `empty($outputs['read_more'])` first.
 
 ## Header Post Counts widget
 
-The "Post Counts" element in the header (Blocksy header builder, middle-row, end column) shows counts like "8 Articles". It is configured **entirely in the Customizer UI** — there is no PHP filter or hook for the item list.
+"Post Counts" element in header (Blocksy header builder, middle-row, end column). Configured **entirely in Customizer UI** — no PHP filter for item list.
 
-### How the config is stored
+### How config is stored
 
-All header builder state lives in a single theme mod: `header_placements`. The `post-counts` item appears in the `items` array with an optional `values` key. When `values` is absent or empty the widget uses Blocksy's built-in default, which shows only standard `post` type posts labelled "Articles" linking to `/articles/`.
+All header builder state in `header_placements` theme mod. `post-counts` item in `items` array with optional `values` key. When absent, widget uses Blocksy default (standard posts only, labelled "Articles").
 
-### Adding CPTs to the count
+### Adding CPTs to count
 
-To add books, notes, checkins (or change labels/URLs) you must either:
+1. **Customizer UI** — Appearance → Customize → Header → middle row → Post Counts. Preferred; writes `values` to DB automatically.
 
-1. **Use the Customizer UI** — Appearance → Customize → Header → middle row → Post Counts → add items there. This is the preferred approach; it writes the `values` into `header_placements` in the DB automatically.
-
-2. **Patch the DB directly via WP-CLI** — read the current `header_placements` mod, find the `post-counts` item in the `items` array, set its `values.header_post_counts_items` to an array of objects like:
+2. **Patch DB via WP-CLI** — read `header_placements`, find `post-counts` item, set `values.header_post_counts_items`:
    ```json
    [
      { "id": "articles", "post_type": "post",    "label": "Articles", "url": "/articles/", "enabled": true },
@@ -250,36 +366,35 @@ To add books, notes, checkins (or change labels/URLs) you must either:
      { "id": "checkins", "post_type": "checkin",  "label": "Checkins", "url": "/checkins/", "enabled": true }
    ]
    ```
-   Then call `set_theme_mod('header_placements', $updated)`.
+   Then `set_theme_mod('header_placements', $updated)`.
 
 ### What NOT to do
 
-- There is **no PHP filter** for the post counts item list — searching the theme/plugin PHP for `post-counts` or `post_counts_items` returns nothing because the feature is compiled into JS bundles.
-- Do not try to grep the theme or blocksy-companion PHP for this feature; it lives entirely in the Customizer JS runtime.
+No PHP filter for post counts item list — feature compiled into JS bundles. Don't grep theme/blocksy-companion PHP for it.
 
 ### Implementation: custom header item
 
-The post-counts widget is **not** a built-in Blocksy feature — it is a custom header item registered by a mu-plugin and loaded from:
+Not built-in Blocksy. Custom header item registered by mu-plugin:
 
 ```
 mu-plugins/header-items/post-counts/
-  config.php   — registers the item with Blocksy's header builder
+  config.php   — registers item with Blocksy's header builder
   options.php  — Customizer panel options
-  view.php     — renders the HTML
+  view.php     — renders HTML
 ```
 
-Blocksy discovers custom header items via the `blocksy:header:items-paths` filter (or equivalent registration). The item path is resolved at runtime; Blocksy confirmed the path as `/var/www/html/wp-content/mu-plugins/header-items/post-counts` when queried via `ReflectionClass`.
+Blocksy discovers via `blocksy:header:items-paths` filter. Path confirmed at runtime: `/var/www/html/wp-content/mu-plugins/header-items/post-counts`.
 
 ### Counts and sparklines
 
-`view.php` runs a single SQL query against `wp_posts` grouped by `post_type` and `DATE_FORMAT(post_date, '%x%v')` (ISO year+week). It builds:
+`view.php` runs single SQL query against `wp_posts` grouped by `post_type` and `DATE_FORMAT(post_date, '%x%v')` (ISO year+week). Builds:
 
 - **Total counts** via `wp_count_posts()` per CPT
-- **52-week sparklines** — one `int` per ISO week, oldest first — as inline SVG `<polyline>` elements, generated entirely in PHP with no JS or charting library
+- **52-week sparklines** — one `int` per ISO week, oldest first — inline SVG `<polyline>`, pure PHP, no JS or charting library
 
-Results are cached in a WordPress transient `possee_header_post_counts_v2` for 12 hours. To force refresh: `wp transient delete possee_header_post_counts_v2`.
+Cached in transient `possee_header_post_counts_v2` for 12 hours. Force refresh: `wp transient delete possee_header_post_counts_v2`.
 
-The sparkline SVG is 52×16px, `preserveAspectRatio="none"`, styled via `.post-counts-sparkline` in `theme-styles.php` (35% opacity, brightens on hover).
+Sparkline SVG: 52×16px, `preserveAspectRatio="none"`, styled via `.post-counts-sparkline` in `theme-styles.php` (35% opacity, brightens on hover).
 
 ## Plugin notes
 
@@ -293,46 +408,16 @@ The sparkline SVG is 52×16px, `preserveAspectRatio="none"`, styled via `.post-c
 | `semantic-linkbacks` | `get_linkbacks()` builds meta_query with `type__not_in` for mentions |
 | `webmention` | `class-comment-walker.php` overwrites `type__not_in` at priority 10; sender hooks `publish_post` |
 
-## n8n automation
+## Open Library Covers API
 
-An **n8n** instance runs on the server (container name `n8n`, volume `n8n_n8n_data`). It automatically imports books from Hardcover to WordPress.
+Book covers from `covers.openlibrary.org`. No API key.
 
-### "Hardcover → WordPress (finished books)" workflow
+**URL**: `https://covers.openlibrary.org/b/isbn/{isbn}-{S|M|L}.jpg`
+- `?default=false` → 404 instead of blank placeholder; JS swap only fires on real image load
+- Rate limit: **100 req/IP/5 min**; over limit returns 403
+- Sizes: `S` (small), `M` (medium, 80px), `L` (large, 140px)
 
-| Property | Value |
-|---|---|
-| Workflow ID | `hardcover-to-wordpress` (used as PK in SQLite) |
-| Schedule | Every hour, at minute 0 |
-| Trigger | `scheduleTrigger` |
-| State | Active |
-| DB file | `/var/lib/docker/volumes/n8n_n8n_data/_data/database.sqlite` |
-
-**Flow:**
-1. **Every hour** — hourly schedule trigger
-2. **Get last checked time** — reads `$getWorkflowStaticData('global').lastChecked`
-3. **Query Hardcover GraphQL** — `POST https://api.hardcover.app/v1/graphql` with query for `user_books` where `status_id = 3` (finished) and `updated_at > lastChecked`
-4. **Build Micropub payloads** — maps GraphQL response to Micropub h-entry format
-5. **Any new books?** — IF node: true → POST to Micropub → update lastChecked; false → stop
-6. **POST to Micropub** — `POST https://blog.sleep-er.co.uk/wp-json/micropub/1.0/endpoint`
-7. **Update last checked time** — sets `workflowStaticData.lastChecked = new Date().toISOString()`
-
-**⚠️ `lastChecked` stuck bug**: The "Update last checked time" node is on the TRUE branch (only runs when books are found). When 0 results come back, `lastChecked` never advances. The `workflow_entity.staticData` column in the DB may not reflect runtime value — n8n may cache it in memory.
-
-**Micropub payload includes:**
-- `summary`, `read-status: finished`
-- `read-of` (h-cite with `name`, `author`, `uid` = ISBN)
-- `hardcover-cover` (cover image URL)
-- `finished-at` (used to set `post_date` on dedup)
-- `hardcover-slug` (Hardcover book slug — used for "View on Hardcover" link)
-- `book-series`, `book-series-position`
-
-**Modifying the workflow:**
-The workflow is stored in SQLite at `/var/lib/docker/volumes/n8n_n8n_data/_data/database.sqlite`, table `workflow_entity`, column `nodes` (JSON). To modify it:
-- Use `sqlite3` to read/write the `nodes` JSON directly
-- Or access the n8n API within the Docker network (port 5678)
-- The workflow is versioned (see `workflow_history` table); if you break it, revert from there
-
-**N8N API key** (for UI/API access when needed): stored in `user_api_keys` table.
+**Attribution**: link each single book page to `https://openlibrary.org/isbn/{isbn}` (`.book-ol-link`). Built-with page also credits API.
 
 ## Backups
 
@@ -342,25 +427,23 @@ ssh homeip docker exec mariadb mysqldump -u wordpress -p"${MYSQL_PASSWORD}" word
 
 ## Git commit conventions
 
-- Load the `caveman-commit` skill before writing any commit message
+- Load `caveman-commit` skill before writing commit message
 - Follow **Conventional Commits**: `<type>(<scope>): <summary>`
 - Types: `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `chore`, `style`
 - Subject ≤50 chars, imperative mood, no trailing period
-- **One commit = one thing**: one feature, one fix, one chore — never bundle unrelated changes. A single change can span multiple files (e.g. PHP + CSS for the same feature), but don't mix distinct changes in one commit.
-- Body only when the *why* isn't obvious; wrap at 72 chars
+- **One commit = one thing** — never bundle unrelated changes
+- Body only when *why* isn't obvious; wrap at 72 chars
 - No AI attribution, no "this commit does X", no emoji
 
 ## Colophon
 
-The site has a `/built-with/` page (post ID 385) listing the tech stack. Update it whenever the infrastructure, theme, or plugin list changes.
+Site has `/built-with/` page (post ID 385). Update when infrastructure, theme, or plugin list changes.
 
 ## NEVER
 
 - **Never set `font-family` in mu-plugin CSS** — Blocksy Customizer owns typography. Exception: `monospace` for code elements.
-- **Never run multi-line commands over `ssh homeip` without `bash << 'EOF' ... EOF`** — remote shell is fish, which breaks bash heredocs and quoting.
-- **Never edit mu-plugin files directly on the server** — edit locally under `mu-plugins/`, then `scp` and restart. Direct edits are overwritten on next deploy and lost.
-- **Never make CSS/PHP changes only on the server** — files tracked in this repo (`mu-plugins/`) must always be edited locally first, then deployed. Server-only changes are silently overwritten on the next deploy and lost.
-- **Never modify n8n workflows only on the server without documenting in AGENTS.md** — workflow changes (GraphQL queries, code nodes, Micropub payloads) are stored in SQLite and have no local backup. Document all changes here.
-- **Never skip clearing all three caches after a PHP change** — OPcache, nginx fastcgi cache, and WP-Optimize disk cache are independent. Missing one means stale output with no obvious cause.
-- **Never omit `--user 65532` from WP-CLI containers** — the uploads directory is owned by that UID; omitting it silently breaks any file write including `media_sideload_image`.
-- **Never use `$post->post_excerpt` to check for a native excerpt** — use `has_excerpt($post_id)`, which checks the raw DB value. Our `get_the_excerpt` filter can return non-empty strings even when no native excerpt exists, causing Blocksy's hero to render generated content as a description.
+- **Never run multi-line commands over `ssh homeip` without `bash << 'EOF' ... EOF`** — remote shell is fish.
+- **Never edit mu-plugin files directly on server** — edit locally, `scp`, restart. Direct edits overwritten on next deploy.
+- **Never skip clearing all three caches after PHP change** — OPcache, nginx fastcgi cache, WP-Optimize disk cache are independent.
+- **Never omit `--user 65532` from WP-CLI containers** — uploads dir owned by that UID; omitting silently breaks any file write.
+- **Never use `$post->post_excerpt` to check for native excerpt** — use `has_excerpt($post_id)`. Our `get_the_excerpt` filter can return non-empty strings even without native excerpt, causing Blocksy hero to render generated content.

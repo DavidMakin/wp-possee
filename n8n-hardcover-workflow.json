@@ -1,0 +1,190 @@
+{
+  "id": "hardcover-to-wordpress",
+  "name": "Hardcover → WordPress (finished books)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "Every hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const workflowStaticData = $getWorkflowStaticData('global');\nconst lastChecked = workflowStaticData.lastChecked || new Date().toISOString();\nreturn [{ json: { lastChecked } }];"
+      },
+      "id": "a1b2c3d4-0002-0002-0002-000000000002",
+      "name": "Get last checked time",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hardcover.app/v1/graphql",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\n  \"query\": \"query { me { user_books(where: { status_id: { _eq: 3 }, updated_at: { _gt: \\\"{{ $json.lastChecked }}\\\" } }, order_by: { updated_at: asc }) { id updated_at rating book { title contributions { author { name } } editions(limit: 1, order_by: { users_count: desc }) { isbn_13 isbn_10 } } } } }\"\n}"
+      },
+      "id": "a1b2c3d4-0003-0003-0003-000000000003",
+      "name": "Query Hardcover GraphQL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "hardcover-api-key",
+          "name": "Hardcover API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst userBooks = data?.data?.me?.[0]?.user_books ?? [];\n\nif (userBooks.length === 0) {\n  return [];\n}\n\nreturn userBooks.map(ub => {\n  const book = ub.book;\n  const title = book?.title ?? 'Unknown Title';\n  const authors = (book?.contributions ?? []).map(c => c.author?.name).filter(Boolean);\n  const author = authors.join(', ') || null;\n  const editions = book?.editions ?? [];\n  const isbn13 = editions[0]?.isbn_13 ?? null;\n  const isbn10 = editions[0]?.isbn_10 ?? null;\n  const isbn = isbn13 || isbn10 || null;\n  const rating = ub.rating ?? null;\n  const updatedAt = ub.updated_at;\n\n  let summary = `Finished reading: ${title}`;\n  if (author) summary += ` by ${author}`;\n  if (rating !== null) {\n    const stars = Math.round(rating);\n    summary += ` ${'★'.repeat(stars)}${'☆'.repeat(5 - stars)} (${rating}/5)`;\n  }\n\n  const readOfProps = { name: [title] };\n  if (author) readOfProps.author = [author];\n  if (isbn) readOfProps.uid = [`isbn:${isbn}`];\n\n  const micropubBody = {\n    type: ['h-entry'],\n    properties: {\n      summary: [summary],\n      'read-status': ['finished'],\n      'read-of': [{ type: ['h-cite'], properties: readOfProps }],\n      category: ['book'],\n      published: [updatedAt],\n      visibility: ['public'],\n      'post-status': ['published']\n    }\n  };\n\n  return { json: { micropubBody, updatedAt, title } };\n});"
+      },
+      "id": "a1b2c3d4-0004-0004-0004-000000000004",
+      "name": "Build Micropub payloads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-has-items",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "a1b2c3d4-0005-0005-0005-000000000005",
+      "name": "Any new books?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://blog.sleep-er.co.uk/wp-json/micropub/1.0/endpoint",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json.micropubBody) }}"
+      },
+      "id": "a1b2c3d4-0006-0006-0006-000000000006",
+      "name": "POST to Micropub",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "micropub-token",
+          "name": "Micropub Bearer Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const workflowStaticData = $getWorkflowStaticData('global');\nworkflowStaticData.lastChecked = new Date().toISOString();\nreturn [{ json: { updated: true, lastChecked: workflowStaticData.lastChecked } }];"
+      },
+      "id": "a1b2c3d4-0007-0007-0007-000000000007",
+      "name": "Update last checked time",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    }
+  ],
+  "connections": {
+    "Every hour": {
+      "main": [
+        [{ "node": "Get last checked time", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get last checked time": {
+      "main": [
+        [{ "node": "Query Hardcover GraphQL", "type": "main", "index": 0 }]
+      ]
+    },
+    "Query Hardcover GraphQL": {
+      "main": [
+        [{ "node": "Build Micropub payloads", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Micropub payloads": {
+      "main": [
+        [{ "node": "Any new books?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Any new books?": {
+      "main": [
+        [{ "node": "POST to Micropub", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "POST to Micropub": {
+      "main": [
+        [{ "node": "Update last checked time", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-05-18T21:00:00.000Z",
+  "versionId": "1"
+}

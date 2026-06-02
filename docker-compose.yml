@@ -1,10 +1,10 @@
 services:
   wordpress:
-    image: dhi.io/wordpress:6.9.4-php8.3-fpm
+    image: dhi.io/wordpress:7.0-alpine3.22-php8.5-fpm
     volumes:
       - wp_data:/var/www/html
       - ./mu-plugins:/var/www/html/wp-content/mu-plugins
-      - ./php/uploads.ini:/opt/php-8.3/etc/php/conf.d/uploads.ini:ro
+      - ./php/uploads.ini:/opt/php-8.5/etc/php/conf.d/uploads.ini:ro
     environment:
       WORDPRESS_DB_HOST: mariadb:3306
       WORDPRESS_DB_NAME: ${MYSQL_DATABASE}
@@ -57,7 +57,7 @@ services:
       - wp-possee
 
   wpcli:
-    image: wordpress:cli-php8.3
+    image: wordpress:cli-php8.5
     depends_on:
       - wordpress
     volumes:

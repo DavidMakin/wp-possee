@@ -7,7 +7,7 @@
  * - Semantic Linkbacks type enhancement
  * - Suppress "Bridgy Response" text for likes
  * - "via [Platform]" label on webmention comments
- * - Bridgy Fed bsky.app self-comment spam filter
+ * - Bridgy Fed self-comment spam filter (bsky.app author + brid.gy/post/bluesky/{own-DID} source)
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -172,7 +172,15 @@ function possee_spam_bsky_self_comments( $commentdata ) {
 	if ( ! $commentdata || is_wp_error( $commentdata ) ) {
 		return $commentdata;
 	}
+	// Block bsky.app self-pingbacks.
 	if ( ( $commentdata['comment_author'] ?? '' ) === 'bsky.app' ) {
+		$commentdata['comment_approved'] = 'spam';
+		return $commentdata;
+	}
+	// Block Bridgy Fed bouncing our own POSSE'd Bluesky posts back as webmentions.
+	// Source pattern: https://brid.gy/post/bluesky/{own-DID}/...
+	$source = $commentdata['comment_meta']['webmention_source_url'] ?? $commentdata['source'] ?? '';
+	if ( $source && preg_match( '#brid\.gy/post/bluesky/did:plc:eemo37qp56jdqiier5krh537/#', $source ) ) {
 		$commentdata['comment_approved'] = 'spam';
 	}
 	return $commentdata;

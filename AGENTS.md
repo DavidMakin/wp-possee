@@ -95,7 +95,7 @@ WordPress container has no shell. Run WP-CLI in throwaway container:
 docker run --rm \
   --user 65532 \
   -v wp-possee_wp_data:/var/www/html \
-  -v /Storage/docker/wp-possee/mu-plugins:/var/www/html/wp-content/mu-plugins \
+  -v /storage/Docker/wp-possee/mu-plugins:/var/www/html/wp-content/mu-plugins \
   --network db \
   -e WORDPRESS_DB_HOST=mariadb \
   -e WORDPRESS_DB_USER=wordpress \
@@ -106,7 +106,7 @@ docker run --rm \
 
 **`--user 65532` mandatory** — uploads dir owned by that UID. Omitting breaks `media_sideload_image` and any file write.
 
-**mu-plugins bind mount mandatory** — mu-plugins at `/Storage/docker/wp-possee/mu-plugins/` on host, not in named volume. Without `-v` they won't load.
+**mu-plugins bind mount mandatory** — mu-plugins at `/storage/Docker/wp-possee/mu-plugins/` on host, not in named volume. Without `-v` they won't load.
 
 ## Critical: inspecting files inside container
 
@@ -120,9 +120,9 @@ Alpine `grep` has no `--include`. Use `-r` with path instead.
 ## Deploy workflow
 
 1. Edit locally under `mu-plugins/`
-2. `scp mu-plugins/foo.php homeip:/Storage/docker/wp-possee/mu-plugins/`
-3. **PHP changes** — restart wordpress container: `ssh homeip docker compose -f /Storage/docker/wp-possee/docker-compose.yml up -d --force-recreate wordpress`
-4. **Clear nginx cache**: `ssh homeip docker compose -f /Storage/docker/wp-possee/docker-compose.yml up -d --force-recreate nginx`
+2. `scp mu-plugins/foo.php homeip:/storage/Docker/wp-possee/mu-plugins/`
+3. **PHP changes** — restart wordpress container: `ssh homeip docker compose -f /storage/Docker/wp-possee/docker-compose.yml up -d --force-recreate wordpress`
+4. **Clear nginx cache**: `ssh homeip docker compose -f /storage/Docker/wp-possee/docker-compose.yml up -d --force-recreate nginx`
 5. **Purge WP-Optimize disk cache** (24h TTL, survives nginx restarts): `ssh homeip rm -rf $(docker volume inspect wp-possee_wp_data --format '{{.Mountpoint}}')/wp-content/cache/wpo-cache/`
 6. Wait ~65s for OPcache revalidation (unless `opcache.revalidate_freq = 0`, then ~5s)
 
@@ -137,7 +137,7 @@ Remote shell is **fish** — use `ssh homeip bash << 'EOF' ... EOF` for multi-li
 | WordPress container | `wp-possee-wordpress-1` (DHI hardened, no shell) |
 | Uploads owner UID | `65532` |
 | Ingress | Cloudflare Tunnel → nginx → PHP-FPM |
-| mu-plugins host path | `/Storage/docker/wp-possee/mu-plugins/` |
+| mu-plugins host path | `/storage/Docker/wp-possee/mu-plugins/` |
 | Named volume | `wp-possee_wp_data` (WP core, themes, plugins — not mu-plugins) |
 | PHP INI | `php/uploads.ini` mounted into container (memory_limit=256M, OPcache, upload sizes) |
 
@@ -422,7 +422,7 @@ Book covers from `covers.openlibrary.org`. No API key.
 ## Backups
 
 ```bash
-ssh homeip docker exec mariadb mysqldump -u wordpress -p"${MYSQL_PASSWORD}" wordpress | gzip > /Storage/docker/wp-possee/backups/wordpress-$(date +%Y%m%d-%H%M%S).sql.gz
+ssh homeip docker exec mariadb mysqldump -u wordpress -p"${MYSQL_PASSWORD}" wordpress | gzip > /storage/Docker/wp-possee/backups/wordpress-$(date +%Y%m%d-%H%M%S).sql.gz
 ```
 
 ## Git commit conventions

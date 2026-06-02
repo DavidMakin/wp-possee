@@ -28,6 +28,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
     networks:
       - wp-possee
       - db
@@ -47,7 +48,7 @@ services:
           - ${DOMAIN}
 
   cloudflared:
-    image: cloudflare/cloudflared:2026.5.0
+    image: cloudflare/cloudflared:2026.5.2
     command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     volumes:
       - ./cloudflared/config.yml:/etc/cloudflared/config.yml

@@ -97,6 +97,70 @@ function possee_intercept_bridgy_request( $preempt, $args, $url ) {
 add_action( 'possee_bridgy_delayed', 'possee_bridgy_delayed_handler', 10, 2 );
 function possee_bridgy_delayed_handler( $post_id, $syndicate_to ) {
 	do_action( 'syn_syndication', $post_id, $syndicate_to );
+
+	// After syndication, clear WP-Optimize page cache for this post so that
+	// when Bridgy crawls it (see below) it gets a fresh page with the new
+	// u-syndication link rather than a stale cached copy.
+	// (Nginx already bypasses its fastcgi cache for Bridgy's user-agent.)
+	possee_clear_post_page_cache( $post_id );
+
+	// Ping Bridgy's /discover endpoint so it re-crawls the post and learns the
+	// mapping between the Bluesky AT URI and the blog post URL. Without this,
+	// Bridgy may have crawled the page before the 90-second Bluesky cron fired
+	// and stored the post without a Bluesky syndication link — causing every
+	// subsequent like/reply to report "No webmention targets".
+	//
+	// Source key is the Bridgy datastore key for the Bluesky account. Store it
+	// via: wp option set possee_bridgy_bluesky_source_key '<value>'
+	// Retrieve the current value from: https://brid.gy/bluesky/<handle> → page source.
+	possee_ping_bridgy_discover( $post_id );
+}
+
+/**
+ * Clear WP-Optimize disk page cache for a single post URL.
+ */
+function possee_clear_post_page_cache( $post_id ) {
+	$url = get_permalink( $post_id );
+	if ( ! $url ) {
+		return;
+	}
+	// WP-Optimize 3.x
+	if ( class_exists( 'WPO_Page_Cache' ) && method_exists( 'WPO_Page_Cache', 'delete_single_page_cache' ) ) {
+		WPO_Page_Cache::delete_single_page_cache( $url );
+		return;
+	}
+	// WP-Optimize via main class
+	if ( function_exists( 'WP_Optimize' ) ) {
+		$cache = WP_Optimize()->get_page_cache();
+		if ( $cache && method_exists( $cache, 'delete_single_page_cache' ) ) {
+			$cache->delete_single_page_cache( $url );
+		}
+	}
+}
+
+/**
+ * POST to Bridgy's /discover endpoint, asking it to re-crawl the blog post
+ * and update its syndication link → blog post URL mapping.
+ */
+function possee_ping_bridgy_discover( $post_id ) {
+	$source_key = get_option( 'possee_bridgy_bluesky_source_key', '' );
+	if ( ! $source_key ) {
+		return;
+	}
+	$url = get_permalink( $post_id );
+	if ( ! $url ) {
+		return;
+	}
+	wp_remote_post(
+		'https://brid.gy/discover',
+		array(
+			'body'    => array(
+				'url'        => $url,
+				'source_key' => $source_key,
+			),
+			'timeout' => 15,
+		)
+	);
 }
 
 add_filter( 'pre_insert_micropub_post', 'possee_log_micropub_payload', 1 );

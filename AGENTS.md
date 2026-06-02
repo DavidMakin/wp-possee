@@ -74,6 +74,40 @@ CPT cards on the homepage (`is_home()`) **must render identically** to their sta
   ```
 - Defined in `microformats.php` for our Bridgy providers.
 
+### Bridgy Fed: own POSSE'd post bouncing back as self-comment
+
+- **Root cause**: Bridgy Fed sends a webmention back to your blog for your own syndicated Bluesky post. Source URL pattern: `https://brid.gy/post/bluesky/did:plc:eemo37qp56jdqiier5krh537/...` — your own DID. Results in a comment with the same text as the post content.
+- **Fix**: `possee_spam_bsky_self_comments` in `comments.php` now also matches `brid.gy/post/bluesky/did:plc:eemo37qp56jdqiier5krh537/` in `webmention_source_url` meta and marks it spam. Previously only blocked `comment_author === 'bsky.app'`.
+- **One-off recovery**: `wp comment delete <ID> --force`
+
+### Syndication to Bluesky/Mastodon using short URL (/?p=ID) instead of pretty permalink
+
+- **Root cause**: `get_permalink()` returns `/?p=ID` for posts in `future`, `draft`, or `pending` status. Syndication Links calls `get_permalink()` just before sending the webmention to Bridgy. If the post was published as scheduled (future post_date) or had no slug yet at syndication time, the wrong URL is sent. Bridgy appends whatever source URL it receives verbatim.
+- **Diagnosis**: Mastodon/Bluesky post reads "Title: https://blog.sleep-er.co.uk/?p=293" instead of the pretty permalink.
+- **Fix**: `possee_syndication_force_pretty_permalink` in `microformats.php` hooks `pre_syndication_links_webmention` (priority 5). It clones the post in WP's object cache with `post_status = 'publish'` and a computed slug so `get_permalink()` returns the pretty URL. Original is restored on `shutdown`. No-op for posts that are already publish with a slug.
+- **One-off recovery**: Resend via Bridgy with a cache-busting param (same as "Couldn't find link" recovery — `?v=N` on the source URL), then update `mf2_syndication` meta.
+
+### Bridgy reply/comment webmention never arrives (post published before Bridgy had the mapping)
+
+- **Root cause**: If a Bluesky reply was posted before Bridgy learned the AT-URI → blog URL mapping (e.g. the mapping was missing due to the "No webmention targets" issue), Bridgy skips the reply and never re-processes it. `brid.gy/comment/bluesky/...` for that reply returns 404.
+- **Diagnosis**: Comment doesn't exist in WordPress at all (not in spam, not pending). `brid.gy/bluesky/sleep-er.bsky.social/post/{RKEY}` returns 404 — post not indexed.
+- **Fix**: Trigger discover to establish the mapping, then insert the comment manually:
+  ```bash
+  # 1. Trigger discover
+  SOURCE_KEY=$(wp option get possee_bridgy_bluesky_source_key)
+  curl -X POST https://brid.gy/discover \
+    -d "url=https://blog.sleep-er.co.uk/YOUR-POST-URL/&source_key=${SOURCE_KEY}"
+
+  # 2. Insert comment manually via wp eval-file (write PHP locally, scp, run)
+  #    - comment_type must be 'comment' (not 'webmention') — webmention type is
+  #      excluded from the standard comment thread display
+  #    - set meta: protocol=webmention, webmention_source_url, webmention_target_url,
+  #      semantic_linkbacks_type=comment, semantic_linkbacks_author_photo
+  #    - comment_date/comment_date_gmt from Bluesky API createdAt (UTC)
+  ```
+- **comment_type must be 'comment'**: Inserting with `comment_type = 'webmention'` causes the comment to be excluded from the standard thread query — it won't render even if approved. Use `comment_type = 'comment'` with `protocol = 'webmention'` meta instead.
+- **After inserting**: clear nginx fastcgi cache (`docker compose up -d --force-recreate nginx`) AND WP-Optimize disk cache (`rm -rf .../wp-content/cache/wpo-cache/`) — both must be cleared or the page still shows the old version.
+
 ### Bridgy Publish failure: "Couldn't find link to brid.gy/publish/bluesky"
 
 - **Root cause**: Syndication Links fires the Bridgy webmention synchronously during the Micropub HTTP request — before nginx/Cloudflare/WP-Optimize caches have a warm copy of the page. Bridgy fetches stale content, fails, and **caches the failure** keyed on source+target URL pair. Subsequent resends of the same webmention return the cached error without re-fetching.

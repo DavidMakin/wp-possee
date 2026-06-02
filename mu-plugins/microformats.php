@@ -874,6 +874,39 @@ function possee_syn_link_mapping( $return, $url ) {
 	return $return;
 }
 
+/**
+ * Ensure get_permalink() returns the pretty URL during webmention syndication.
+ *
+ * WordPress returns /?p=ID for posts in 'future', 'draft', or 'pending' status.
+ * Bridgy appends the source URL it's given verbatim, so syndicating a scheduled
+ * post produces "Title: https://blog.sleep-er.co.uk/?p=293" on Mastodon/Bluesky.
+ *
+ * Fix: temporarily clone the post in WP's object cache with post_status='publish'
+ * so get_permalink() resolves the pretty URL, then restore the original on shutdown.
+ */
+add_action( 'pre_syndication_links_webmention', 'possee_syndication_force_pretty_permalink', 5 );
+function possee_syndication_force_pretty_permalink( $post_id ) {
+	$post = get_post( $post_id );
+	if ( ! $post ) {
+		return;
+	}
+	$needs_fix = in_array( $post->post_status, array( 'future', 'draft', 'pending', 'auto-draft' ), true )
+		|| empty( $post->post_name );
+	if ( ! $needs_fix ) {
+		return;
+	}
+	$mutated              = clone $post;
+	$mutated->post_status = 'publish';
+	if ( empty( $mutated->post_name ) ) {
+		$mutated->post_name = sanitize_title( $mutated->post_title );
+	}
+	wp_cache_set( $post_id, $mutated, 'posts' );
+	// Restore the original object after the webmention is dispatched.
+	add_action( 'shutdown', static function () use ( $post ) {
+		wp_cache_set( $post->ID, $post, 'posts' );
+	} );
+}
+
 add_filter( 'get_the_terms', 'possee_hide_default_category', 10, 3 );
 function possee_hide_default_category( $terms, $post_id, $taxonomy ) {
 	if ( is_admin() || 'category' !== $taxonomy || ! is_array( $terms ) ) {

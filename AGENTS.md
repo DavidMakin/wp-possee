@@ -23,6 +23,33 @@ CPT cards on the homepage (`is_home()`) **must render identically** to their sta
 
 - **Never** embed multi-line PHP in `ssh homeip "bash -c '...'"`. Quoting breaks silently. Always: write PHP to local file → `scp` to server → `wp eval-file /tmp/file.php`. No exceptions beyond single short expressions.
 
+### Bridgy backfeed: "No webmention targets" for likes/replies
+
+- **Root cause**: Bridgy crawls the blog (periodic, every few hours) and may hit a newly-published post **before** the 90-second delayed cron fires and adds the Bluesky `u-syndication` link. Bridgy stores the post without a Bluesky mapping. When a like/reply arrives, it reports "No webmention targets" and sends nothing.
+- **Diagnosis**: Check `https://brid.gy/bluesky/<handle>` → Responses section. A like entry with "No webmention targets" confirms this. The Bridgy like source page (`https://brid.gy/like/bluesky/...`) will have only one `u-like-of` (the Bluesky URL) instead of two (Bluesky URL + blog post URL).
+- **Permanent fix**: `possee_bridgy_delayed_handler` in `microformats.php` now calls `possee_ping_bridgy_discover()` after `syn_syndication` fires. This POSTs to `https://brid.gy/discover` with the blog post URL, causing Bridgy to re-crawl and update its mapping. WP-Optimize disk cache for the post is also cleared first (nginx already bypasses its fastcgi cache for Bridgy's user-agent).
+- **Source key**: The Bridgy datastore key for the Bluesky account is stored in WP option `possee_bridgy_bluesky_source_key`. If you disconnect/reconnect the Bluesky account on Bridgy, get the new value from `view-source:https://brid.gy/bluesky/sleep-er.bsky.social` (search `discover-source-key`) and update: `wp option set possee_bridgy_bluesky_source_key '<value>'`
+- **One-off recovery** (for posts published before the fix): Trigger Bridgy to re-crawl, then manually send webmentions:
+  ```bash
+  # 1. Re-crawl via Bridgy discover (get source_key from wp option)
+  SOURCE_KEY=$(wp option get possee_bridgy_bluesky_source_key)
+  curl -X POST https://brid.gy/discover \
+    -d "url=https://blog.sleep-er.co.uk/YOUR-POST-URL/&source_key=${SOURCE_KEY}"
+
+  # 2. Wait ~15s, then get liker DIDs from Bluesky API
+  curl "https://public.api.bsky.app/xrpc/app.bsky.feed.getLikes?uri=at://did:plc:eemo37qp56jdqiier5krh537/app.bsky.feed.post/POST_RKEY"
+
+  # 3. Send webmention for each liker (double-encode AT URI and liker DID)
+  curl -X POST https://blog.sleep-er.co.uk/wp-json/webmention/1.0/endpoint \
+    --data-urlencode "source=https://brid.gy/like/bluesky/AUTHOR_DID/DOUBLE_ENCODED_AT_URI/DOUBLE_ENCODED_LIKER_DID" \
+    --data-urlencode "target=https://blog.sleep-er.co.uk/YOUR-POST-URL/"
+
+  # 4. Approve the resulting pending comments
+  wp comment approve <ID>
+  ```
+- **nginx bypasses cache for Bridgy**: The nginx config already has `if ($http_user_agent ~* "bridgy|brid\.gy") { set $skip_cache 1; }` — Bridgy always hits PHP-FPM directly. Only WP-Optimize disk cache can serve stale content to Bridgy.
+- **Compose project location**: `/storage/Docker/wp-possee` (note lowercase `storage`, capital `D` in `Docker`).
+
 ### Bridgy Publish failure: "Couldn't find link to brid.gy/publish/bluesky"
 
 - **Root cause**: Syndication Links fires the Bridgy webmention synchronously during the Micropub HTTP request — before nginx/Cloudflare/WP-Optimize caches have a warm copy of the page. Bridgy fetches stale content, fails, and **caches the failure** keyed on source+target URL pair. Subsequent resends of the same webmention return the cached error without re-fetching.
@@ -254,6 +281,11 @@ Don't set `font-family` in mu-plugin CSS — Blocksy Customizer owns it. Excepti
 - Extends `SynProvider_Webmention_Bridgy` as `SynProvider_Webmention_Bridgy_Bluesky`
 - Registers `webmention-bluesky-bridgy` provider for Syndication Links
 - Outputs hidden `.p-bridgy-bluesky-content` on all singular posts with raw `wp_strip_all_tags(get_the_content())` — Bridgy uses this instead of parsing `e-content`, preventing timestamp/footer leakage
+
+**Delayed Bridgy cron + discover ping**
+- `possee_bridgy_delayed_handler`: fires 90s after Micropub post creation via `possee_bridgy_delayed` cron; calls `syn_syndication`, then `possee_clear_post_page_cache` (WP-Optimize), then `possee_ping_bridgy_discover`
+- `possee_clear_post_page_cache($post_id)`: clears WP-Optimize disk cache for the post URL so Bridgy doesn't get a stale page during discover crawl
+- `possee_ping_bridgy_discover($post_id)`: POSTs to `https://brid.gy/discover` with the post URL and `possee_bridgy_bluesky_source_key` option; causes Bridgy to re-crawl and learn the `at://...` → blog URL mapping before any likes arrive
 
 **Syndication Links as Blocksy Card Element**
 - `reading_time` meta element: word-count → "N min read"

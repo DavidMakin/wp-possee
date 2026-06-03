@@ -29,6 +29,70 @@ CPT cards on the homepage (`is_home()`) **must render identically** to their sta
 - Hook `rest_api_init` at priority 20, `unregister_rest_field('search-result', 'placeholder_image')`, re-register with callback returning `mf2_book-cover-url` for `subtype === 'book'`. No JS changes needed — Blocksy's `search-implementation.js` uses `(ct_featured_media || placeholder_image)`.
 - `unregister_rest_field()` returns `WP_Error` if field wasn't registered — check with `is_wp_error()` and proceed.
 
+### Verifying nginx reachability from host (bypass Cloudflare)
+
+The `wget` approach inside an Alpine container on the `wp-possee_internal` network returns `400 Bad Request` — nginx likely rejects HTTP/1.0 or the `Host` header format. Use `curl` on the **host** with `--resolve` instead:
+
+```bash
+ssh homeip curl -s --resolve "blog.sleep-er.co.uk:80:172.28.0.4" "http://blog.sleep-er.co.uk/your/path/"
+```
+
+Get nginx IP from: `docker inspect wp-possee-nginx-1 | grep '"IPAddress"'`
+
+This bypasses Cloudflare and nginx fastcgi cache (reset on `--force-recreate`). Always use this to verify PHP output changes.
+
+### n8n API key format
+
+The n8n REST API (`/api/v1/`) requires the **full JWT token** in the `X-N8N-API-KEY` header, not the short key ID. The correct token is the long `eyJhbGci...` JWT stored in the `user_api_keys` table (`apiKey` column). The short `1QbCB7CcFeC2IM8C` string is the key ID, not the bearer value.
+
+### n8n workflow inspection without API (sqlite)
+
+If the n8n REST API is unresponsive or returns 400, query the sqlite DB directly:
+
+```bash
+docker cp n8n:/home/node/.n8n/database.sqlite /tmp/n8n-check.sqlite
+scp homeip:/tmp/n8n-check.sqlite /tmp/n8n-check.sqlite
+python3 -c "
+import sqlite3, json
+conn = sqlite3.connect('/tmp/n8n-check.sqlite')
+rows = conn.execute('SELECT id, name, active FROM workflow_entity').fetchall()
+for r in rows: print(r)
+"
+```
+
+`active: 1` = workflow is enabled and will fire on schedule. `better-sqlite3` is not available inside the n8n container — copy out and use Python.
+
+### Book post meta: patching missing fields via WP-CLI
+
+When the n8n Hardcover→WordPress workflow creates a book post but the nodes were out of date (missing series/cover/slug), patch the missing meta directly rather than re-triggering the workflow (risk of duplicate posts):
+
+```bash
+WP="docker run --rm --user 65532 -v wp-possee_wp_data:/var/www/html -v /storage/Docker/wp-possee/mu-plugins:/var/www/html/wp-content/mu-plugins --network db -e WORDPRESS_DB_HOST=mariadb -e WORDPRESS_DB_USER=wordpress -e WORDPRESS_DB_PASSWORD=${MYSQL_PASSWORD} -e WORDPRESS_DB_NAME=wordpress wordpress:cli-php8.3 wp --allow-root"
+
+$WP post meta update <POST_ID> mf2_book-series "Series Name"
+$WP post meta update <POST_ID> mf2_book-series-position "2"
+$WP post meta update <POST_ID> mf2_hardcover-cover "https://assets.hardcover.app/..."
+$WP post meta update <POST_ID> mf2_hardcover-slug "book-slug"
+$WP post meta update <POST_ID> mf2_finished-at "YYYY-MM-DD"
+```
+
+After patching: clear WP-Optimize disk cache (`rm -rf .../wpo-cache/`) and recreate nginx. Verify with curl `--resolve`.
+
+**To verify the active workflow nodes have the right fields** (e.g. series, slug, cover), inspect the sqlite DB:
+
+```python
+import sqlite3, json
+conn = sqlite3.connect('/tmp/n8n-check.sqlite')
+row = conn.execute('SELECT nodes FROM workflow_entity WHERE id="hardcover-to-wordpress"').fetchone()
+nodes = json.loads(row[0])
+for n in nodes:
+    params = json.dumps(n.get('parameters', {}))
+    if any(k in params.lower() for k in ['series', 'slug', 'graphql']):
+        print(n['name'], '| series:', 'series' in params.lower(), '| slug:', 'slug' in params.lower())
+```
+
+The workflow creates NEW posts via Micropub and does **not** update existing ones — never re-trigger it for a post that already exists.
+
 ### WP-CLI quoting over SSH
 
 - **Never** embed multi-line PHP in `ssh homeip "bash -c '...'"`. Quoting breaks silently. Always: write PHP to local file → `scp` to server → `wp eval-file /tmp/file.php`. No exceptions beyond single short expressions.

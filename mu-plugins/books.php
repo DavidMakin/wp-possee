@@ -395,7 +395,10 @@ function possee_book_card_html( $post_id, $data, $context = 'single' ) {
 			<data class="u-uid" value="<?php echo esc_attr( $data['uid'] ); ?>"></data>
 			<?php endif; ?>
 			<?php if ( $post_id ) : ?>
-			<span class="book-date"><?php echo esc_html( get_the_date( 'j F Y', $post_id ) ); ?></span>
+			<span class="book-date"><span class="book-date-label"><?php
+				$date_labels = [ 'finished' => 'Finished', 'reading' => 'Started', 'want-to-read' => 'Added' ];
+				echo esc_html( ( $date_labels[ $data['status'] ] ?? 'Added' ) . ': ' );
+			?></span><?php echo esc_html( get_the_date( 'j F Y', $post_id ) ); ?></span>
 			<?php endif; ?>
 			<?php if ( $context === 'single' && $post_id ) : ?>
 			<?php

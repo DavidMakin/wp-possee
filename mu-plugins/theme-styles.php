@@ -60,6 +60,27 @@ blockquote {
 .entry-card.type-book::before    { background-color: #f59f00; }
 .entry-card.type-checkin::before { background-color: #20c997; }
 
+/* ── CPT single pages: same left-accent strip as archive cards ── */
+.single article.type-post,
+.single article.type-note,
+.single article.type-book,
+.single article.type-checkin {
+	position: relative;
+}
+.single article::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 4px;
+	height: 100%;
+	background-color: transparent;
+}
+.single article.type-post::before    { background-color: #5c7cfa; }
+.single article.type-note::before    { background-color: #94d82d; }
+.single article.type-book::before    { background-color: #f59f00; }
+.single article.type-checkin::before { background-color: #20c997; }
+
 .entry-card:hover {
 	transform: translate(0, -2px);
 	box-shadow: 0 15px 45px -10px rgba(10, 16, 34, 0.2);
@@ -761,7 +782,7 @@ add_action( 'wp_head', function () {
 }
 
 .book-card--single .book-cover-img {
-	width: 140px;
+	width: 160px;
 }
 
 .book-card--archive .book-cover-img {
@@ -918,10 +939,10 @@ add_action( 'wp_head', function () {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.3em;
-	font-size: 0.75em;
+	font-size: 0.82em;
 	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: 0.06em;
+	text-transform: none;
+	letter-spacing: 0.02em;
 	color: #999;
 	margin-top: 0.2em;
 }
@@ -961,6 +982,11 @@ add_action( 'wp_head', function () {
 	color: #999;
 }
 
+.book-date-label {
+	color: #bbb;
+	font-weight: 400;
+}
+
 .checkin-by-date {
 	color: #aaa;
 	font-size: 0.9em;
@@ -975,6 +1001,13 @@ add_action( 'wp_head', function () {
 
 .star-full  { color: #f5a623; }
 .star-empty { color: #ccc; }
+
+.book-card--single {
+	margin-bottom: 1.5rem;
+	background: #faf8f5;
+	border-radius: 8px;
+	padding: 1rem;
+}
 
 .book-card--archive {
 	padding: 0.5rem 0;
@@ -1089,6 +1122,13 @@ add_action( 'wp_head', function () {
 	background: #1e2e46;
 	border-color: #1e2e46;
 	color: #fff;
+}
+
+/* Mute redundant Micropub body text on book posts (e.g. "Finished reading: ...") */
+.is-book-post .e-content > p:first-of-type:last-of-type {
+	color: #bbb;
+	font-size: 0.85em;
+	font-style: italic;
 }
 </style>
 	<?php

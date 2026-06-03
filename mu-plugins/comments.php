@@ -167,6 +167,22 @@ function possee_via_label( $text, $comment ) {
 	return $text . sprintf( ' (via %s)', $via );
 }
 
+/**
+ * Use the Bluesky/Mastodon avatar photo for webmention comments instead of
+ * the fallback Gravatar (mm.jpg), because comment_author_email is empty for
+ * Bridgy-pushed webmentions.
+ */
+add_filter( 'get_avatar_url', 'possee_webmention_avatar_url', 10, 3 );
+function possee_webmention_avatar_url( $url, $id_or_email, $args ) {
+	if ( is_object( $id_or_email ) && isset( $id_or_email->comment_ID ) ) {
+		$photo = get_comment_meta( $id_or_email->comment_ID, 'semantic_linkbacks_author_photo', true );
+		if ( $photo ) {
+			return $photo;
+		}
+	}
+	return $url;
+}
+
 add_filter( 'webmention_comment_data', 'possee_spam_bsky_self_comments', 22 );
 function possee_spam_bsky_self_comments( $commentdata ) {
 	if ( ! $commentdata || is_wp_error( $commentdata ) ) {

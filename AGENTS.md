@@ -60,6 +60,20 @@ CPT cards on the homepage (`is_home()`) **must render identically** to their sta
 - **nginx bypasses cache for Bridgy**: The nginx config already has `if ($http_user_agent ~* "bridgy|brid\.gy") { set $skip_cache 1; }` — Bridgy always hits PHP-FPM directly. Only WP-Optimize disk cache can serve stale content to Bridgy.
 - **Compose project location**: `/storage/Docker/wp-possee` (note lowercase `storage`, capital `D` in `Docker`).
 
+### Syndication Links checkbox state driven by `is_checked()`, not `_syndicate-to` meta
+
+- The "Syndicate To" sidebar checkboxes in the post editor get their checked state from `SynProvider::is_checked()`, which returns `false` by default. The `_syndicate-to` post meta is NOT consulted when rendering checkboxes — it's only read on `save_post`.
+- To sync checkboxes with `_syndicate-to` meta, use the `syndication_link_checked` filter:
+  ```php
+  add_filter( 'syndication_link_checked', 'possee_syndication_link_checked', 10, 3 );
+  function possee_syndication_link_checked( $checked, $uid, $post_id ) {
+      if ( ! in_array( $uid, MY_UID_LIST, true ) ) return $checked;
+      $syndicate_to = get_post_meta( $post_id, '_syndicate-to', true );
+      return is_array( $syndicate_to ) && in_array( $uid, $syndicate_to, true );
+  }
+  ```
+- Defined in `microformats.php` for our Bridgy providers.
+
 ### Bridgy Publish failure: "Couldn't find link to brid.gy/publish/bluesky"
 
 - **Root cause**: Syndication Links fires the Bridgy webmention synchronously during the Micropub HTTP request — before nginx/Cloudflare/WP-Optimize caches have a warm copy of the page. Bridgy fetches stale content, fails, and **caches the failure** keyed on source+target URL pair. Subsequent resends of the same webmention return the cached error without re-fetching.

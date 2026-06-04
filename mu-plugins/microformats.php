@@ -363,6 +363,29 @@ add_action( 'plugins_loaded', function () {
 }, 20 );
 
 /**
+ * Sync the Syndication Links per-post checkbox state from _syndicate-to meta.
+ *
+ * The base SynProvider::is_checked() returns false unconditionally, so
+ * checkboxes in the editor sidebar appear unchecked even when the post
+ * has _syndicate-to meta set. This filter reads the meta and returns
+ * the correct state for our Bridgy providers.
+ */
+add_filter( 'syndication_link_checked', 'possee_syndication_link_checked', 10, 3 );
+function possee_syndication_link_checked( $checked, $uid, $post_id ) {
+	if ( ! in_array( $uid, POSSEE_BRIDGY_UIDS, true ) ) {
+		return $checked;
+	}
+	if ( ! $post_id ) {
+		return $checked;
+	}
+	$syndicate_to = get_post_meta( $post_id, '_syndicate-to', true );
+	if ( ! is_array( $syndicate_to ) ) {
+		return $checked;
+	}
+	return in_array( $uid, $syndicate_to, true );
+}
+
+/**
  * Notes have no title and syndicated copies lack a link back.
  * Give Bridgy explicit content with the permalink so Mastodon
  * and Bluesky posts include a "blog.sleep-er.co.uk" link.

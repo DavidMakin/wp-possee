@@ -19,6 +19,16 @@ CPT cards on the homepage (`is_home()`) **must render identically** to their sta
 
 - Don't branch on `is_home()`. Same code path everywhere, suppress unwanted slots. Branching = two code paths + easy-to-miss filter interactions (e.g. excerpt filters).
 
+### Blocksy header search `search_through`
+
+- CPTs default to `false` in header search's "Search Through Criteria" (`$cpt_options[$cpt] = false` in `options.php`). Stored in `header_placements` theme mod under `sections[0].items[<idx>].values.search_through`. Fix: patch with `set_theme_mod`, set CPTs to `1`.
+- Without this, the header search form only sends `ct_post_type=post:page`, missing books and other CPTs.
+
+### Live search overlay: inject book covers via `placeholder_image` REST field
+
+- Hook `rest_api_init` at priority 20, `unregister_rest_field('search-result', 'placeholder_image')`, re-register with callback returning `mf2_book-cover-url` for `subtype === 'book'`. No JS changes needed — Blocksy's `search-implementation.js` uses `(ct_featured_media || placeholder_image)`.
+- `unregister_rest_field()` returns `WP_Error` if field wasn't registered — check with `is_wp_error()` and proceed.
+
 ### WP-CLI quoting over SSH
 
 - **Never** embed multi-line PHP in `ssh homeip "bash -c '...'"`. Quoting breaks silently. Always: write PHP to local file → `scp` to server → `wp eval-file /tmp/file.php`. No exceptions beyond single short expressions.
@@ -474,6 +484,43 @@ Hardcover API keys from https://hardcover.app/account/api are **full Authorizati
 $api_key = preg_replace( '/^Bearer\s+/i', '', $raw_key );
 ```
 The backfill script (`scripts/backfill-books.php`) handles this via file-fallback: if no CLI arg or env var, reads `/tmp/hc_key.txt` and strips the prefix.
+
+### Blocksy header search: CPTs excluded from `search_through`
+
+Blocksy's header search element has a "Search Through Criteria" setting (Customizer → Header → Search → Search Results → Search Through Criteria) that defaults to `post`, `page`, `product` only. CPTs are set to `false` by default in `options.php` (`$cpt_options[$single_cpt] = false`). The saved value lives in `header_placements` theme mod at `sections[0].items[<idx>].values.search_through`.
+
+**Fix via WP-CLI** — read `header_placements`, find the search item, set each CPT to `1`:
+```php
+$placements = get_theme_mod('header_placements');
+// Walk sections[0].items, find ['id'=>'search'], enable values.search_through[$cpt] = 1
+set_theme_mod('header_placements', $placements);
+```
+
+On the search results page, the search form reads `ct_post_type` from the URL and perpetuates it. If the initial form is correct (includes all CPTs), subsequent searches stay correct.
+
+### Live search overlay: injecting book covers via `placeholder_image`
+
+Blocksy's live search overlay renders each result using the `placeholder_image` REST field on `search-result` objects. The JS (`search-implementation.js`) uses `ct_featured_media` first, falling back to `placeholder_image`. For books without featured images, overriding `placeholder_image` is the cleanest injection point.
+
+**Approach**: Hook `rest_api_init` at priority 20 (after Blocksy's registration at 10), unregister the existing `placeholder_image` field, re-register with a callback that returns `mf2_book-cover-url` for `subtype === 'book'`:
+```php
+add_action( 'rest_api_init', 'possee_search_cover_field', 20 );
+function possee_search_cover_field() {
+    if ( ! isset( $_GET['ct_live_search'] ) || 'true' !== $_GET['ct_live_search'] ) return;
+    unregister_rest_field( 'search-result', 'placeholder_image' );
+    register_rest_field( 'search-result', 'placeholder_image', array(
+        'get_callback' => function ( $post ) {
+            if ( 'book' === ( $post['subtype'] ?? '' ) ) {
+                $cover = get_post_meta( $post['id'], 'mf2_book-cover-url', true );
+                if ( $cover ) return $cover;
+            }
+            // fallback to product placeholder or SVG icon
+        },
+    ) );
+}
+```
+
+`unregister_rest_field()` returns `WP_Error` if the field wasn't registered — check with `is_wp_error()` and proceed regardless.
 
 ### Book series HTML: `esc_html` on HTML-containing strings
 

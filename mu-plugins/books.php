@@ -158,7 +158,7 @@ function possee_book_cover_placeholder_url() {
 	);
 }
 
-function possee_book_cover_img_html( $isbn, $alt, $size = 'M', $extra_class = '', $fallback_url = '' ) {
+function possee_book_cover_img_html( $isbn, $alt, $size = 'M', $extra_class = '', $fallback_url = '', $use_direct_src = false ) {
 	$placeholder = possee_book_cover_placeholder_url();
 	$class       = trim( 'book-cover-img ' . $extra_class );
 
@@ -166,6 +166,21 @@ function possee_book_cover_img_html( $isbn, $alt, $size = 'M', $extra_class = ''
 
 	$dim_map = [ 'S' => [ 60, 90 ], 'M' => [ 80, 120 ], 'L' => [ 140, 210 ] ];
 	[ $w, $h ] = $dim_map[ $size ] ?? [ 80, 120 ];
+
+	if ( $use_direct_src && ( $fallback_url || $ol_src ) ) {
+		// Direct src approach — no JS swap. Use best URL as src, onerror falls back.
+		$primary = $fallback_url ?: $ol_src;
+		$onerror = $fallback_url && $ol_src ? sprintf( "this.onerror=null;this.src='%s'", esc_url( $ol_src ) ) : '';
+		return sprintf(
+			'<img src="%s" alt="%s" class="%s" loading="lazy" width="%d" height="%d"%s/>',
+			esc_url( $primary ),
+			esc_attr( $alt ),
+			esc_attr( $class ),
+			$w,
+			$h,
+			$onerror ? ' onerror="' . esc_attr( $onerror ) . '"' : ''
+		);
+	}
 
 	if ( $ol_src || $fallback_url ) {
 		possee_book_enqueue_cover_loader();
@@ -484,7 +499,8 @@ function possee_book_card_layer( $outputs, $prefix, $featured_image_args ) {
 	}
 
 	$hc_fallback = $data['hc_cover_url'] ?: ( $data['hc_cover'] ?? '' );
-	$cover_img = possee_book_cover_img_html( $data['isbn'], '', 'M', '', $hc_fallback );
+	// Archive/search: use direct src so covers show immediately without JS swap.
+	$cover_img = possee_book_cover_img_html( $data['isbn'], '', 'M', '', $hc_fallback, true );
 	$stars     = possee_book_stars_html( $data['rating'] );
 	$read_more = sprintf(
 		'<a class="entry-button wp-element-button ct-button" href="%s">Read More<span class="screen-reader-text"> %s</span></a>',
@@ -668,4 +684,48 @@ function possee_rest_book_update_status( $request ) {
 		'isbn'    => $isbn,
 		'status'  => $read_status,
 	);
+}
+
+// ── Live search overlay: inject book cover images ─────────────
+
+add_action( 'rest_api_init', 'possee_search_cover_field', 20 );
+function possee_search_cover_field() {
+	if ( ! isset( $_GET['ct_live_search'] ) || 'true' !== $_GET['ct_live_search'] ) {
+		return;
+	}
+
+	// Silence: de-register Blocksy's placeholder_image (may not exist if WooCommerce absent).
+	if ( function_exists( 'unregister_rest_field' ) ) {
+		$unregistered = unregister_rest_field( 'search-result', 'placeholder_image' );
+		if ( is_wp_error( $unregistered ) ) {
+			// Field was not registered — that's fine, we'll register it fresh.
+		}
+	}
+
+	register_rest_field( 'search-result', 'placeholder_image', array(
+		'get_callback' => function ( $post, $field_name, $request ) {
+			// Books: return the actual cover URL.
+			if ( isset( $post['subtype'] ) && 'book' === $post['subtype'] ) {
+				$cover = get_post_meta( $post['id'], 'mf2_book-cover-url', true );
+				if ( $cover ) {
+					return $cover;
+				}
+			}
+
+			// Products: fall back to WooCommerce placeholder.
+			if ( isset( $post['type'] ) && 'product' === $post['type'] ) {
+				if ( function_exists( 'wc_placeholder_img_src' ) ) {
+					return wc_placeholder_img_src( 'thumbnail' );
+				}
+			}
+
+			// Default: book-shaped SVG icon.
+			return 'data:image/svg+xml,' . rawurlencode(
+				'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23555" stroke-width="1.5">'
+				. '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>'
+				. '<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>'
+				. '</svg>'
+			);
+		},
+	) );
 }

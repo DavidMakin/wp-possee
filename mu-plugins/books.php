@@ -62,18 +62,53 @@ function possee_book_get_data( $post_id ) {
 
 	$finished_at = $possee_meta( 'mf2_finished-at' );
 
-	$series_name = null;
-	$series_pos  = null;
-	$sn          = $possee_meta( 'mf2_book-series' );
+	$series_name      = null;
+	$series_pos       = null;
+	$series_count     = null;
+	$series_completed = null;
+	$sn               = $possee_meta( 'mf2_book-series' );
 	if ( $sn ) {
 		$series_name = $sn;
 		$sp          = $possee_meta( 'mf2_book-series-position' );
 		if ( $sp !== null && $sp !== '' ) {
 			$series_pos = (float) $sp;
 		}
+		$sc = $possee_meta( 'mf2_book-series-count' );
+		if ( $sc !== null && $sc !== '' ) {
+			$series_count = (int) $sc;
+		}
+		$scomp = $possee_meta( 'mf2_book-series-completed' );
+		if ( $scomp !== null ) {
+			$series_completed = filter_var( $scomp, FILTER_VALIDATE_BOOLEAN );
+		}
 	}
 
-	return compact( 'title', 'author', 'isbn', 'uid', 'status', 'rating', 'hc_cover', 'progress_pages', 'progress_total', 'progress_pct', 'finished_at', 'series_name', 'series_pos' );
+	$pages       = $possee_meta( 'mf2_book-pages' );
+	if ( $pages !== null && $pages !== '' ) {
+		$pages = (int) $pages;
+	}
+
+	$release_year = $possee_meta( 'mf2_book-release-year' );
+	if ( $release_year !== null && $release_year !== '' ) {
+		$release_year = (int) $release_year;
+	}
+
+	$category_id = $possee_meta( 'mf2_book-category-id' );
+	if ( $category_id !== null && $category_id !== '' ) {
+		$category_id = (int) $category_id;
+	}
+
+	$hc_cover_url = $possee_meta( 'mf2_book-cover-url' );
+
+	$genres = null;
+	if ( isset( $all_meta['mf2_book-genres'][0] ) ) {
+		$gv = maybe_unserialize( $all_meta['mf2_book-genres'][0] );
+		if ( is_array( $gv ) && ! empty( $gv ) ) {
+			$genres = $gv;
+		}
+	}
+
+	return compact( 'title', 'author', 'isbn', 'uid', 'status', 'rating', 'hc_cover', 'hc_cover_url', 'progress_pages', 'progress_total', 'progress_pct', 'finished_at', 'series_name', 'series_pos', 'series_count', 'series_completed', 'pages', 'release_year', 'category_id', 'genres' );
 }
 
 function possee_book_fetch_hc_cover( $post_id, $hc_slug ) {
@@ -210,6 +245,43 @@ function possee_book_year_heading_script() {
 
 
 
+function possee_book_category_label( $category_id ) {
+	if ( ! $category_id ) {
+		return '';
+	}
+	$labels = array(
+		1  => 'Book',
+		2  => 'Novella',
+		3  => 'Short Story',
+		4  => 'Graphic Novel',
+		5  => 'Fan Fiction',
+		6  => 'Research Paper',
+		7  => 'Poetry',
+		8  => 'Collection',
+		9  => 'Web Novel',
+		10 => 'Light Novel',
+	);
+	return isset( $labels[ $category_id ] ) ? $labels[ $category_id ] : '';
+}
+
+function possee_book_pages_html( $pages ) {
+	if ( ! $pages ) {
+		return '';
+	}
+	return '<span class="book-pages">' . esc_html( $pages ) . ' pages</span>';
+}
+
+function possee_book_genres_html( $genres ) {
+	if ( empty( $genres ) ) {
+		return '';
+	}
+	$tags = array();
+	foreach ( $genres as $g ) {
+		$tags[] = '<span class="book-genre-tag">' . esc_html( $g ) . '</span>';
+	}
+	return '<span class="book-genres">' . implode( '', $tags ) . '</span>';
+}
+
 function possee_book_stars_html( $rating ) {
 	if ( $rating === null ) {
 		return '';
@@ -245,18 +317,32 @@ function possee_book_series_html( $data ) {
 	if ( empty( $data['series_name'] ) ) {
 		return '';
 	}
-	$pos = $data['series_pos'];
-	$label = $pos !== null
-		? esc_html( $data['series_name'] ) . ' <span class="book-series-position">#' . esc_html( $pos == (int) $pos ? (int) $pos : $pos ) . '</span>'
-		: esc_html( $data['series_name'] );
-	return '<span class="book-series">' . $label . '</span>';
+	$parts = array( esc_html( $data['series_name'] ) );
+	if ( $data['series_pos'] !== null ) {
+		$pos   = $data['series_pos'];
+		$p     = $pos == (int) $pos ? (int) $pos : esc_html( $pos );
+		if ( $data['series_count'] !== null ) {
+			$parts[] = '<span class="book-series-position">#' . $p . ' <span class="book-series-of">of</span> ' . (int) $data['series_count'] . '</span>';
+		} else {
+			$parts[] = '<span class="book-series-position">#' . $p . '</span>';
+		}
+	}
+	if ( $data['series_completed'] === true ) {
+		$parts[] = '<span class="book-series-completed">completed</span>';
+	}
+	return '<span class="book-series">' . implode( ' ', $parts ) . '</span>';
 }
 
 function possee_book_card_html( $post_id, $data, $context = 'single' ) {
 	$size      = $context === 'single' ? 'L' : 'M';
-	$cover_img = possee_book_cover_img_html( $data['isbn'], 'Cover of ' . $data['title'], $size, '', $data['hc_cover'] ?? '' );
+	$hc_fallback = $data['hc_cover_url'] ?: ( $data['hc_cover'] ?? '' );
+	$cover_img = possee_book_cover_img_html( $data['isbn'], 'Cover of ' . $data['title'], $size, '', $hc_fallback );
 	$stars     = possee_book_stars_html( $data['rating'] );
 	$isbn_attr = $data['uid'] ? ' data-isbn="' . esc_attr( $data['uid'] ) . '"' : '';
+
+	$category_label = possee_book_category_label( $data['category_id'] ?? 0 );
+	$pages_html     = possee_book_pages_html( $data['pages'] ?? 0 );
+	$genres_html    = possee_book_genres_html( $data['genres'] ?? array() );
 
 	ob_start();
 	?>
@@ -269,12 +355,19 @@ function possee_book_card_html( $post_id, $data, $context = 'single' ) {
 				<span class="p-name book-title"><?php echo esc_html( $data['title'] ); ?></span>
 				<span class="p-author book-author"><?php echo esc_html( $data['author'] ); ?></span>
 				<?php echo possee_book_series_html( $data ); ?>
-				<?php if ( $data['isbn'] ) : ?>
-				<data class="u-uid" value="<?php echo esc_attr( $data['uid'] ); ?>"></data>
-				<?php endif; ?>
 				<?php if ( $stars ) : ?>
 				<div class="book-rating-wrap"><?php echo $stars; ?></div>
 				<?php endif; ?>
+				<div class="book-metadata-line">
+					<?php if ( $category_label ) : ?>
+					<span class="book-category"><?php echo esc_html( $category_label ); ?></span>
+					<?php endif; ?>
+					<?php echo $pages_html; ?>
+					<?php if ( $data['release_year'] ) : ?>
+					<span class="book-release-year"><?php echo esc_html( $data['release_year'] ); ?></span>
+					<?php endif; ?>
+				</div>
+				<?php echo $genres_html; ?>
 				<?php
 			$status_slug  = sanitize_html_class( $data['status'] );
 			$status_labels = [ 'reading' => 'Currently reading', 'finished' => 'Finished', 'want-to-read' => 'Want to read' ];
@@ -283,6 +376,9 @@ function possee_book_card_html( $post_id, $data, $context = 'single' ) {
 			?>
 			<span class="p-read-status book-status book-status--<?php echo esc_attr( $status_slug ); ?>"><?php echo $checkmark; echo esc_html( $status_label ); ?></span>
 			<?php echo possee_book_progress_bar_html( $data ); ?>
+			<?php if ( $data['isbn'] ) : ?>
+			<data class="u-uid" value="<?php echo esc_attr( $data['uid'] ); ?>"></data>
+			<?php endif; ?>
 			<?php if ( $post_id ) : ?>
 			<span class="book-date"><?php echo esc_html( get_the_date( 'j F Y', $post_id ) ); ?></span>
 			<?php endif; ?>
@@ -387,7 +483,8 @@ function possee_book_card_layer( $outputs, $prefix, $featured_image_args ) {
 		return $outputs;
 	}
 
-	$cover_img = possee_book_cover_img_html( $data['isbn'], '', 'M', '', $data['hc_cover'] ?? '' );
+	$hc_fallback = $data['hc_cover_url'] ?: ( $data['hc_cover'] ?? '' );
+	$cover_img = possee_book_cover_img_html( $data['isbn'], '', 'M', '', $hc_fallback );
 	$stars     = possee_book_stars_html( $data['rating'] );
 	$read_more = sprintf(
 		'<a class="entry-button wp-element-button ct-button" href="%s">Read More<span class="screen-reader-text"> %s</span></a>',
@@ -431,8 +528,19 @@ function possee_book_card_layer( $outputs, $prefix, $featured_image_args ) {
 		}
 	}
 
+	$pages_html  = possee_book_pages_html( $data['pages'] ?? 0 );
+	$genres_html = possee_book_genres_html( $data['genres'] ?? array() );
+	$archive_meta = array();
+	if ( $pages_html ) {
+		$archive_meta[] = $pages_html;
+	}
+	if ( $genres_html ) {
+		$archive_meta[] = $genres_html;
+	}
+	$archive_meta_html = $archive_meta ? '<div class="book-archive-metadata">' . implode( '', $archive_meta ) . '</div>' : '';
+
 	$outputs['featured_image'] = sprintf(
-		'%s%s<div class="book-archive-row">%s<div class="book-archive-info">%s<span class="book-author">%s</span>%s%s%s%s</div></div>',
+		'%s%s<div class="book-archive-row">%s<div class="book-archive-info">%s<span class="book-author">%s</span>%s%s%s%s%s</div></div>',
 		$year_heading,
 		$tags_html,
 		$cover_html,
@@ -441,6 +549,7 @@ function possee_book_card_layer( $outputs, $prefix, $featured_image_args ) {
 		possee_book_series_html( $data ),
 		$stars ? '<div class="book-rating-wrap">' . $stars . '</div>' : '',
 		$status_html,
+		$archive_meta_html,
 		possee_book_progress_bar_html( $data )
 	);
 

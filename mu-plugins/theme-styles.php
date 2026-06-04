@@ -718,9 +718,17 @@ add_action( 'wp_head', function () {
 	display: flex;
 }
 
+.book-card--single {
+	background: #fafaf8;
+	border: 1px solid #eae8e4;
+	border-radius: 10px;
+	padding: 1.25rem 1.5rem;
+	margin-bottom: 1.5rem;
+}
+
 .book-card .h-cite {
 	display: flex;
-	gap: 1.25rem;
+	gap: 1.5rem;
 	align-items: flex-start;
 }
 
@@ -799,31 +807,111 @@ add_action( 'wp_head', function () {
 .book-meta {
 	display: flex;
 	flex-direction: column;
-	gap: 0.3em;
+	gap: 0.35em;
 }
 
 .book-title {
-	font-size: 1.15em;
+	font-size: 1.2em;
 	font-weight: 700;
 	color: var(--theme-text-color);
 	line-height: 1.3;
 }
 
 .book-author {
-	color: #666;
+	color: #777;
 	font-size: 0.95em;
 }
 
+/* Series: subtle left accent — inline-width so bg doesn't span full cell */
 .book-series {
-	display: block;
+	display: inline-block;
 	font-size: 0.78em;
 	color: #888;
 	font-style: italic;
-	margin-top: 0.1em;
+	margin-top: 0.25em;
+	padding: 0.25em 0.5em 0.25em 0.6em;
+	border-left: 2px solid #d4c8b0;
+	background: #f6f4f0;
+	border-radius: 0 4px 4px 0;
+	align-self: flex-start;
 }
 .book-series-position {
 	font-style: normal;
 	font-weight: 600;
+}
+.book-series-of {
+	font-style: normal;
+	font-weight: 300;
+	font-size: 0.9em;
+}
+.book-series-completed {
+	font-style: normal;
+	font-size: 0.85em;
+	color: #2e7d32;
+}
+
+/* Metadata with dot separators */
+.book-metadata-line {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.4em 0;
+	font-size: 0.82em;
+	color: #888;
+	margin-top: 0.3em;
+}
+.book-metadata-line > span:not(:last-child)::after {
+	content: "\00b7";
+	margin: 0 0.5em;
+	color: #ccc;
+}
+.book-category {
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	font-size: 0.9em;
+	color: #888;
+}
+.book-pages {
+	white-space: nowrap;
+}
+.book-release-year {
+	white-space: nowrap;
+}
+
+.book-genres {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.3em;
+	margin-top: 0.4em;
+}
+.book-genre-tag {
+	display: inline-block;
+	padding: 0.15em 0.6em;
+	font-size: 0.72em;
+	border: 1px solid #ddd;
+	border-radius: 999px;
+	color: #777;
+	background: #fff;
+	transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.book-genre-tag:hover {
+	border-color: #aaa;
+	color: #444;
+	background: #f5f5f5;
+}
+.book-archive-metadata {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0 0;
+	font-size: 0.78em;
+	color: #888;
+	margin-top: 0.2em;
+}
+.book-archive-metadata > span:not(:last-child)::after {
+	content: "\00b7";
+	margin: 0 0.5em;
+	color: #ccc;
 }
 
 .book-status {
@@ -888,18 +976,50 @@ add_action( 'wp_head', function () {
 .star-full  { color: #f5a623; }
 .star-empty { color: #ccc; }
 
-.book-card--single {
-	margin-bottom: 1.5rem;
-}
-
 .book-card--archive {
 	padding: 0.5rem 0;
 }
 
 .book-hardcover-link,
 .book-ol-link {
-	font-size: 0.8em;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3em;
+	font-size: 0.78em;
 	color: #888;
+	text-decoration: none;
+	padding: 0.2em 0.6em;
+	border: 1px solid #e0e0e0;
+	border-radius: 6px;
+	background: #fff;
+	transition: all 0.15s;
+	align-self: flex-start;
+}
+.book-hardcover-link:hover,
+.book-ol-link:hover {
+	color: #444;
+	border-color: #bbb;
+	background: #f9f9f9;
+}
+.book-hardcover-link::before {
+	content: "";
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	background: currentColor;
+	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z'/%3E%3C/svg%3E") center/contain no-repeat;
+	-webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z'/%3E%3C/svg%3E") center/contain no-repeat;
+	flex-shrink: 0;
+}
+.book-ol-link::before {
+	content: "";
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	background: currentColor;
+	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z'/%3E%3C/svg%3E") center/contain no-repeat;
+	-webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z'/%3E%3C/svg%3E") center/contain no-repeat;
+	flex-shrink: 0;
 }
 
 /* Live search — CPT type icons */

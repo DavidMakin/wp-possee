@@ -1,6 +1,6 @@
 {
   "id": "hardcover-to-wordpress",
-  "name": "Hardcover → WordPress (finished books)",
+  "name": "Hardcover \u2192 WordPress (finished books)",
   "nodes": [
     {
       "parameters": {
@@ -17,7 +17,10 @@
       "name": "Every hour",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
@@ -27,7 +30,10 @@
       "name": "Get last checked time",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 300]
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -47,13 +53,16 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={\n  \"query\": \"query { me { user_books(where: { status_id: { _eq: 3 }, updated_at: { _gt: \\\"{{ $json.lastChecked }}\\\" } }, order_by: { updated_at: asc }) { id updated_at rating book { title contributions { author { name } } editions(limit: 1, order_by: { users_count: desc }) { isbn_13 isbn_10 } } } } }\"\n}"
+        "body": "={\n  \"query\": \"query { me { user_books(where: { status_id: { _eq: 3 }, updated_at: { _gt: \\\"{{ $json.lastChecked }}\\\" } }, order_by: { updated_at: asc }) { id updated_at rating book { title pages release_year book_category_id cached_tags(path: \\\"Genre\\\") contributions { author { name } } editions(limit: 1, order_by: { users_count: desc }) { isbn_13 isbn_10 image { url } } book_series { series { name books_count is_completed } position } } } } }\"\n}"
       },
       "id": "a1b2c3d4-0003-0003-0003-000000000003",
       "name": "Query Hardcover GraphQL",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [680, 300],
+      "position": [
+        680,
+        300
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "hardcover-api-key",
@@ -63,13 +72,16 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst userBooks = data?.data?.me?.[0]?.user_books ?? [];\n\nif (userBooks.length === 0) {\n  return [];\n}\n\nreturn userBooks.map(ub => {\n  const book = ub.book;\n  const title = book?.title ?? 'Unknown Title';\n  const authors = (book?.contributions ?? []).map(c => c.author?.name).filter(Boolean);\n  const author = authors.join(', ') || null;\n  const editions = book?.editions ?? [];\n  const isbn13 = editions[0]?.isbn_13 ?? null;\n  const isbn10 = editions[0]?.isbn_10 ?? null;\n  const isbn = isbn13 || isbn10 || null;\n  const rating = ub.rating ?? null;\n  const updatedAt = ub.updated_at;\n\n  let summary = `Finished reading: ${title}`;\n  if (author) summary += ` by ${author}`;\n  if (rating !== null) {\n    const stars = Math.round(rating);\n    summary += ` ${'★'.repeat(stars)}${'☆'.repeat(5 - stars)} (${rating}/5)`;\n  }\n\n  const readOfProps = { name: [title] };\n  if (author) readOfProps.author = [author];\n  if (isbn) readOfProps.uid = [`isbn:${isbn}`];\n\n  const micropubBody = {\n    type: ['h-entry'],\n    properties: {\n      summary: [summary],\n      'read-status': ['finished'],\n      'read-of': [{ type: ['h-cite'], properties: readOfProps }],\n      category: ['book'],\n      published: [updatedAt],\n      visibility: ['public'],\n      'post-status': ['published']\n    }\n  };\n\n  return { json: { micropubBody, updatedAt, title } };\n});"
+        "jsCode": "const data = $input.first().json;\nconst userBooks = data?.data?.me?.[0]?.user_books ?? [];\n\nif (userBooks.length === 0) {\n  return [];\n}\n\nreturn userBooks.map(ub => {\n  const book = ub.book;\n  const title = book?.title ?? 'Unknown Title';\n  const authors = (book?.contributions ?? []).map(c => c.author?.name).filter(Boolean);\n  const author = authors.join(', ') || null;\n  const editions = book?.editions ?? [];\n  const isbn13 = editions[0]?.isbn_13 ?? null;\n  const isbn10 = editions[0]?.isbn_10 ?? null;\n  const isbn = isbn13 || isbn10 || null;\n  const rating = ub.rating ?? null;\n  const updatedAt = ub.updated_at;\n\n  let summary = `Finished reading: ${title}`;\n  if (author) summary += ` by ${author}`;\n  if (rating !== null) {\n    const stars = Math.round(rating);\n    summary += ` ${'\u2605'.repeat(stars)}${'\u2606'.repeat(5 - stars)} (${rating}/5)`;\n  }\n\n  const readOfProps = { name: [title] };\n  if (author) readOfProps.author = [author];\n  if (isbn) readOfProps.uid = [`isbn:${isbn}`];\n\n  const bookSeries = book?.book_series?.[0];\n  if (bookSeries?.series?.name) {\n    readOfProps['book-series'] = [bookSeries.series.name];\n    if (bookSeries.position != null) {\n      readOfProps['book-series-position'] = [String(bookSeries.position)];\n    }\n    if (bookSeries.series.books_count != null) {\n      readOfProps['book-series-count'] = [String(bookSeries.series.books_count)];\n    }\n    if (bookSeries.series.is_completed != null) {\n      readOfProps['book-series-completed'] = [String(bookSeries.series.is_completed)];\n    }\n  }\n\n  if (book?.pages != null) {\n    readOfProps['book-pages'] = [String(book.pages)];\n  }\n  if (book?.release_year != null) {\n    readOfProps['book-release-year'] = [String(book.release_year)];\n  }\n  if (book?.book_category_id != null) {\n    readOfProps['book-category-id'] = [String(book.book_category_id)];\n  }\n\n  const genres = book?.cached_tags?.filter(t => t.category === 'Genre') ?? [];\n  if (genres.length > 0) {\n    readOfProps['book-genres'] = genres.map(g => g.tag);\n  }\n\n  const edition = book?.editions?.[0];\n  if (edition?.image?.url) {\n    readOfProps['book-cover-url'] = [edition.image.url];\n  }\n\n  const micropubBody = {\n    type: ['h-entry'],\n    properties: {\n      summary: [summary],\n      'read-status': ['finished'],\n      'read-of': [{ type: ['h-cite'], properties: readOfProps }],\n      category: ['book'],\n      published: [updatedAt],\n      visibility: ['public'],\n      'post-status': ['published']\n    }\n  };\n\n  return { json: { micropubBody, updatedAt, title } };\n});"
       },
       "id": "a1b2c3d4-0004-0004-0004-000000000004",
       "name": "Build Micropub payloads",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 300]
+      "position": [
+        900,
+        300
+      ]
     },
     {
       "parameters": {
@@ -97,7 +109,10 @@
       "name": "Any new books?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1120, 300]
+      "position": [
+        1120,
+        300
+      ]
     },
     {
       "parameters": {
@@ -123,7 +138,10 @@
       "name": "POST to Micropub",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, 200],
+      "position": [
+        1340,
+        200
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "micropub-token",
@@ -139,39 +157,78 @@
       "name": "Update last checked time",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1560, 200]
+      "position": [
+        1560,
+        200
+      ]
     }
   ],
   "connections": {
     "Every hour": {
       "main": [
-        [{ "node": "Get last checked time", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Get last checked time",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Get last checked time": {
       "main": [
-        [{ "node": "Query Hardcover GraphQL", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Query Hardcover GraphQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Query Hardcover GraphQL": {
       "main": [
-        [{ "node": "Build Micropub payloads", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Build Micropub payloads",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Micropub payloads": {
       "main": [
-        [{ "node": "Any new books?", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Any new books?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Any new books?": {
       "main": [
-        [{ "node": "POST to Micropub", "type": "main", "index": 0 }],
+        [
+          {
+            "node": "POST to Micropub",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
     "POST to Micropub": {
       "main": [
-        [{ "node": "Update last checked time", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Update last checked time",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },

@@ -988,6 +988,38 @@ function possee_micropub_book_deduplicate( $args ) {
 		}
 	}
 
+	// Extract series info from read-of properties.
+	if ( isset( $props['book-series'][0] ) ) {
+		$args['meta_input']['mf2_book-series'] = $props['book-series'][0];
+		if ( isset( $props['book-series-position'][0] ) ) {
+			$args['meta_input']['mf2_book-series-position'] = $props['book-series-position'][0];
+		}
+		if ( isset( $props['book-series-count'][0] ) ) {
+			$args['meta_input']['mf2_book-series-count'] = (int) $props['book-series-count'][0];
+		}
+		if ( isset( $props['book-series-completed'][0] ) ) {
+			$args['meta_input']['mf2_book-series-completed'] = filter_var( $props['book-series-completed'][0], FILTER_VALIDATE_BOOLEAN );
+		}
+	}
+
+	// Extract book metadata from read-of properties.
+	$book_meta_map = array(
+		'mf2_book-pages'       => 'book-pages',
+		'mf2_book-release-year' => 'book-release-year',
+		'mf2_book-category-id'  => 'book-category-id',
+		'mf2_book-cover-url'    => 'book-cover-url',
+	);
+	foreach ( $book_meta_map as $meta_key => $prop_key ) {
+		if ( isset( $props[ $prop_key ][0] ) ) {
+			$args['meta_input'][ $meta_key ] = $props[ $prop_key ][0];
+		}
+	}
+
+	// Extract genres (array).
+	if ( isset( $props['book-genres'] ) && is_array( $props['book-genres'] ) ) {
+		$args['meta_input']['mf2_book-genres'] = array_filter( $props['book-genres'], 'is_string' );
+	}
+
 	return $args;
 }
 

@@ -467,6 +467,30 @@ ssh homeip docker exec mariadb mysqldump -u wordpress -p"${MYSQL_PASSWORD}" word
 - Body only when *why* isn't obvious; wrap at 72 chars
 - No AI attribution, no "this commit does X", no emoji
 
+### Hardcover book backfill: Bearer prefix double-prepend
+
+Hardcover API keys from https://hardcover.app/account/api are **full Authorization header values** (starting with `Bearer `). When using them in PHP `wp_remote_post`, strip the prefix before passing to the script, or check if it's already present:
+```php
+$api_key = preg_replace( '/^Bearer\s+/i', '', $raw_key );
+```
+The backfill script (`scripts/backfill-books.php`) handles this via file-fallback: if no CLI arg or env var, reads `/tmp/hc_key.txt` and strips the prefix.
+
+### Book series HTML: `esc_html` on HTML-containing strings
+
+`possee_book_series_html()` builds the position label as `#3 <span class="book-series-of">of</span> 12`. Using `esc_html()` on the full label double-escapes the inner span. Fix: escape only the raw position number, concatenate the HTML parts directly:
+```php
+$p = $pos == (int) $pos ? (int) $pos : esc_html( $pos );
+$parts[] = '<span class="book-series-position">#' . $p . ' <span class="book-series-of">of</span> ' . (int) $data['series_count'] . '</span>';
+```
+
+### Flex children stretching with `align-self: flex-start`
+
+In a flex column (`display: flex; flex-direction: column`), all children stretch to full width by default (`align-items: stretch`). Elements that should only wrap their content width (series accent bar, link buttons) need `align-self: flex-start`. This applies to `.book-series`, `.book-hardcover-link`, `.book-ol-link` in `theme-styles.php`.
+
+### Dot separators in metadata lines
+
+Metadata lines like "Novella · 160 pages · 2018" use `::after` pseudo-elements on `<span>` children (except the last) with `content: "\00b7"`. The parent must be `display: flex; align-items: center;` and children use `:not(:last-child)::after` to avoid a trailing dot.
+
 ## Colophon
 
 Site has `/built-with/` page (post ID 385). Update when infrastructure, theme, or plugin list changes.

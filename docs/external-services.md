@@ -111,6 +111,28 @@ if ($workflow.staticData) {
 
 Without the guard, manual executions crash with `Cannot set properties of undefined (setting 'lastChecked')`.
 
+### n8n "Published" tag: direct SQL bypasses UI tracking
+
+n8n's "Published" tag (shown next to a workflow name in the editor list) tracks whether the workflow was last **saved through the UI**. Modifying workflow nodes, `active` flag, or `versionCounter` directly in the SQLite `workflow_entity` table bypasses this — the workflow runs fine but the UI won't show "Published". The tag correlates with entries in `workflow_publish_history` (events: `activated`, `deactivated`), which direct DB writes don't create.
+
+**Fix**: Open the workflow in the n8n editor and click Save once. That writes the publish history record and the tag appears.
+
+### n8n `$getWorkflowStaticData` unreliable for persisted state
+
+n8n's `$getWorkflowStaticData('global')` does **not** reliably persist between executions in all deployment setups (Docker, SQLite backend). Once written, it may never update or may revert on container restart. This caused the "Hardcover → WordPress (finished books)" workflow to re-fetch the same 8 books every hour because `lastChecked` was stuck at `2026-05-18T21:53:04Z`.
+
+**Fix**: Delegate persistence to WordPress via REST endpoint:
+1. Register `GET/POST /wp-json/possee/v1/last-checked` in `microformats.php`
+2. `GET` returns `possee_n8n_last_checked` WP option
+3. If option empty, fall back to `most_recent_book_post_date − 24h` (self-healing on restart)
+4. `POST` writes new timestamp (optional — GET fallback is sufficient)
+5. n8n "Get last checked time" code node fetches from WP endpoint instead of `$getWorkflowStaticData`
+6. n8n "Update last checked time" becomes no-op (GET endpoint self-heals)
+
+**Secondary defence**: `possee_micropub_book_deduplicate` (hooked `pre_insert_micropub_post`) catches any remaining duplicates by title+author normalisation.
+
+**Deploy**: update `possee_n8n_last_checked` via `wp option set possee_n8n_last_checked <ISO-datetime>`, restart WordPress.
+
 ### Internal Docker network: use http, not https for nginx
 
 nginx inside the Docker network only listens on **port 80**, not 443. SSL terminates at the Cloudflare tunnel (external). Any container-to-container HTTP request targeting the blog must use `http://nginx/` with a `Host` header so WordPress resolves the correct vhost:

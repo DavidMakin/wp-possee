@@ -1299,12 +1299,23 @@ function possee_micropub_book_slug($title, $props)
     return $props['read-of'][0]['properties']['name'][0];
 }
 
-add_filter('pre_insert_micropub_post', 'possee_micropub_book_deduplicate');
-function possee_micropub_book_deduplicate($args)
-{
-    if (! isset($args['meta_input']['mf2_read-of'])) {
-        return $args;
-    }
+/**
+ * Normalise a book title for fuzzy comparison: strip entities, lowercase,
+ * collapse whitespace, remove all non-alphanumeric characters.
+ */
+function possee_normalise_book_title( $raw ) {
+	$s = html_entity_decode( $raw, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+	// Normalise word separators to spaces, then strip remaining non-alpha.
+	$s = preg_replace( '/[-\x{2013}\x{2014}]/u', ' ', strtolower( $s ) );
+	$s = preg_replace( '/[^a-z0-9\s]/u', '', $s );
+	return preg_replace( '/\s+/', ' ', trim( $s ) );
+}
+
+add_filter( 'pre_insert_micropub_post', 'possee_micropub_book_deduplicate' );
+function possee_micropub_book_deduplicate( $args ) {
+	if ( ! isset( $args['meta_input']['mf2_read-of'] ) ) {
+		return $args;
+	}
 
     $read_of = $args['meta_input']['mf2_read-of'];
     if (! is_array($read_of) || empty($read_of)) {
@@ -1324,76 +1335,96 @@ function possee_micropub_book_deduplicate($args)
         $args['post_content'] = $args['post_excerpt'];
     }
 
-    // Extract ISBN for dedup.
-    if (! isset($props['uid'][0])) {
-        return $args;
-    }
+	// Extract identifiers and metadata for dedup.
+	$uid    = isset( $props['uid'][0] ) ? $props['uid'][0] : '';
+	$title  = isset( $props['name'][0] ) ? $props['name'][0] : '';
+	$author = isset( $props['author'][0] ) ? $props['author'][0] : '';
 
-    $uid = $props['uid'][0];
-    if (strpos($uid, 'isbn:') !== 0 && strpos($uid, 'ISBN:') !== 0) {
-        return $args;
-    }
+	// Try to find existing book — first by ISBN, then by title+author.
+	$existing_id = 0;
 
-    $isbn = substr($uid, 5);
+	if ( strpos( $uid, 'isbn:' ) === 0 || strpos( $uid, 'ISBN:' ) === 0 ) {
+		$isbn = substr( $uid, 5 );
 
-    // Check for existing book with this ISBN.
-    $existing = get_posts(array(
-        'post_type'        => 'book',
-        'post_status'      => 'any',
-        'meta_key'         => 'isbn',
-        'meta_value'       => $isbn,
-        'fields'           => 'ids',
-        'posts_per_page'   => 1,
-        'update_meta_cache' => false,
-        'no_found_rows'    => true,
-    ));
+		$existing = get_posts( array(
+			'post_type'        => 'book',
+			'post_status'      => 'any',
+			'meta_key'         => 'isbn',
+			'meta_value'       => $isbn,
+			'fields'           => 'ids',
+			'posts_per_page'   => 1,
+			'update_meta_cache' => false,
+			'no_found_rows'    => true,
+		) );
 
-    if (! empty($existing)) {
-        $post_id = $existing[0];
+		if ( ! empty( $existing ) ) {
+			$existing_id = $existing[0];
+		}
+	}
 
-        // Persist meta changes to the existing post.
-        //
-        // The Micropub plugin's handle_create() → store_mf2() puts all mf2
-        // properties into $args['meta_input'] but then insert_post()
-        // short-circuits when it sees ID is set, never calling wp_insert_post.
-        // So meta accumulated in $args['meta_input'] is silently dropped.
-        //
-        // Workaround: persist meta directly here, then set ID only to prevent
-        // the plugin from creating a duplicate post.
-        if (isset($args['meta_input']) && is_array($args['meta_input'])) {
-            foreach ($args['meta_input'] as $meta_key => $meta_value) {
-                update_post_meta($post_id, $meta_key, $meta_value);
-            }
-        }
+	// Fallback: fuzzy match by normalised title + LIKE author.
+	// Different editions/sources use different ISBNs and some include
+	// narrator names in the author field — exact match won't cut it.
+	if ( ! $existing_id && $title && $author ) {
+		$norm_title = possee_normalise_book_title( $title );
 
-        // When transitioning to "finished", update post_date to match.
-        $new_status = $args['meta_input']['mf2_read-status'] ?? null;
-        if ('finished' === $new_status) {
-            $finished_at = $args['meta_input']['mf2_finished-at'] ?? null;
-            if ($finished_at) {
-                $date = date('Y-m-d H:i:s', strtotime($finished_at));
-                wp_update_post(array(
-                    'ID'            => $post_id,
-                    'post_date'     => $date,
-                    'post_date_gmt' => get_gmt_from_date($date),
-                ));
-            }
-        }
+		// Match by search (s) to get candidates, then verify via PHP.
+		$existing = get_posts( array(
+			'post_type'        => 'book',
+			'post_status'      => 'any',
+			'fields'           => 'ids',
+			'posts_per_page'   => 10,
+			'update_meta_cache' => false,
+			'no_found_rows'    => true,
+			's'                => $title,
+		) );
 
-        // Short-circuit — prevent Micropub plugin from creating a new post.
-        $args['ID'] = $post_id;
-    } else {
-        // Store ISBN as accessible meta for future dedup queries.
-        if (! isset($args['meta_input'])) {
-            $args['meta_input'] = array();
-        }
-        $args['meta_input']['isbn'] = $isbn;
+		foreach ( $existing as $candidate_id ) {
+			$stored_title = possee_normalise_book_title( get_the_title( $candidate_id ) );
+			if ( $norm_title !== $stored_title ) {
+				continue;
+			}
+			$stored_author = get_post_meta( $candidate_id, 'book_author', true );
+			if ( empty( $stored_author ) ) {
+				continue;
+			}
+			// Author in incoming data should appear somewhere in the stored field
+			// (which may include e.g. narrator names after a comma).
+			if ( false !== stripos( $stored_author, $author ) ) {
+				$existing_id = $candidate_id;
+				break;
+			}
+		}
+	}
 
-        // Store author as accessible meta.
-        if (isset($props['author'][0])) {
-            $args['meta_input']['book_author'] = $props['author'][0];
-        }
-    }
+	if ( $existing_id ) {
+		// Short-circuit — book already exists.
+		$args['ID'] = $existing_id;
+
+		// When transitioning to "finished", update post_date to match.
+		$new_status = $args['meta_input']['mf2_read-status'] ?? null;
+		if ( 'finished' === $new_status ) {
+			$finished_at = $args['meta_input']['mf2_finished-at'] ?? null;
+			if ( $finished_at ) {
+				$date = date( 'Y-m-d H:i:s', strtotime( $finished_at ) );
+				$args['post_date']     = $date;
+				$args['post_date_gmt'] = get_gmt_from_date( $date );
+			}
+		}
+	} else {
+		// Store ISBN as accessible meta for future dedup queries.
+		if ( ! isset( $args['meta_input'] ) ) {
+			$args['meta_input'] = array();
+		}
+		if ( ! empty( $isbn ) ) {
+			$args['meta_input']['isbn'] = $isbn;
+		}
+
+		// Store author as accessible meta.
+		if ( $author ) {
+			$args['meta_input']['book_author'] = $author;
+		}
+	}
 
     // Extract series info from read-of properties.
     if (isset($props['book-series'][0])) {
@@ -1535,4 +1566,64 @@ function possee_venue_recent_checkins($content)
     $html .= '</div>';
 
     return $content . $html;
+}
+
+// ── REST endpoint: n8n lastChecked watermark ──────────────────
+// Stores the last time n8n checked Hardcover for new books.
+// Persistent across n8n restarts (unlike $getWorkflowStaticData).
+
+add_action( 'rest_api_init', 'possee_register_last_checked_routes' );
+function possee_register_last_checked_routes() {
+	register_rest_route( 'possee/v1', '/last-checked', array(
+		array(
+			'methods'             => 'GET',
+			'callback'            => 'possee_get_last_checked',
+			'permission_callback' => '__return_true',
+		),
+		array(
+			'methods'             => 'POST',
+			'callback'            => 'possee_set_last_checked',
+			'permission_callback' => 'possee_rest_book_auth_check',
+			'args'                => array(
+				'value' => array(
+					'required'          => true,
+					'type'              => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+				),
+			),
+		),
+	) );
+}
+
+function possee_get_last_checked() {
+	$stored = get_option( 'possee_n8n_last_checked', '' );
+	if ( ! empty( $stored ) ) {
+		return array( 'lastChecked' => $stored );
+	}
+
+	// No stored value: return the most recent book post's date minus 24h.
+	$posts = get_posts( array(
+		'post_type'      => 'book',
+		'posts_per_page' => 1,
+		'orderby'        => 'date',
+		'order'          => 'DESC',
+		'fields'         => 'ids',
+	) );
+	if ( ! empty( $posts ) ) {
+		$post_date = get_post_time( 'c', true, $posts[0] );
+		$dt        = new DateTime( $post_date );
+		$dt->modify( '-24 hours' );
+		return array( 'lastChecked' => $dt->format( 'c' ) );
+	}
+
+	// No books at all: return 30 days ago.
+	$dt = new DateTime();
+	$dt->modify( '-30 days' );
+	return array( 'lastChecked' => $dt->format( 'c' ) );
+}
+
+function possee_set_last_checked( $request ) {
+	$value = $request->get_param( 'value' );
+	update_option( 'possee_n8n_last_checked', $value, false );
+	return array( 'success' => true, 'lastChecked' => $value );
 }

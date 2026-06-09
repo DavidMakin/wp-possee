@@ -133,6 +133,12 @@ n8n's `$getWorkflowStaticData('global')` does **not** reliably persist between e
 
 **Deploy**: update `possee_n8n_last_checked` via `wp option set possee_n8n_last_checked <ISO-datetime>`, restart WordPress.
 
+### n8n task runner sandbox: no `fetch`, no `require`
+
+n8n's JS Task Runner sandbox (n8n 2.x+ with task runner mode) blocks `fetch()` and `require('https')` in Code nodes. HTTP requests from a Code node are **not possible** in this mode. The only way to make HTTP requests is with an HTTP Request node.
+
+**Fix**: Replace the Code node with an HTTP Request node (`n8n-nodes-base.httpRequest`). Set `method: GET`, `url: ...`, and the output `$json` will contain the parsed response body — no code needed.
+
 ### Internal Docker network: use http, not https for nginx
 
 nginx inside the Docker network only listens on **port 80**, not 443. SSL terminates at the Cloudflare tunnel (external). Any container-to-container HTTP request targeting the blog must use `http://nginx/` with a `Host` header so WordPress resolves the correct vhost:

@@ -1,6 +1,6 @@
 {
   "id": "hardcover-to-wordpress",
-  "name": "Hardcover \u2192 WordPress (finished books)",
+  "name": "Hardcover \u2192 WordPress (finished + reading)",
   "nodes": [
     {
       "parameters": {
@@ -24,12 +24,23 @@
     },
     {
       "parameters": {
-        "jsCode": "const workflowStaticData = $getWorkflowStaticData('global');\nconst lastChecked = workflowStaticData.lastChecked || new Date().toISOString();\nreturn [{ json: { lastChecked } }];"
+        "method": "GET",
+        "url": "https://blog.sleep-er.co.uk/wp-json/possee/v1/last-checked",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "n8n"
+            }
+          ]
+        },
+        "options": {}
       },
       "id": "a1b2c3d4-0002-0002-0002-000000000002",
       "name": "Get last checked time",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         460,
         300
@@ -53,7 +64,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={\n  \"query\": \"query { me { user_books(where: { status_id: { _eq: 3 }, updated_at: { _gt: \\\"{{ $json.lastChecked }}\\\" } }, order_by: { updated_at: asc }) { id updated_at rating book { title pages release_year book_category_id cached_tags(path: \\\"Genre\\\") contributions { author { name } } editions(limit: 1, order_by: { users_count: desc }) { isbn_13 isbn_10 image { url } } book_series { series { name books_count is_completed } position } } } } }\"\n}"
+        "body": "={\"query\":\"query { me { user_books(where: { status_id: { _in: [1, 2, 3] }, updated_at: { _gt: \\\"{{ $json.lastChecked }}\\\" } }, order_by: { updated_at: asc }) { id updated_at rating status_id user_book_reads(order_by: { id: desc }, limit: 1) { finished_at } reading_journals(where: { event: { _in: [\\\"rated\\\", \\\"status_read\\\", \\\"finished\\\"] } }, order_by: { action_at: desc }, limit: 1) { action_at event } book { slug title image { url } contributions { author { name } } book_series(order_by: { position: asc }, limit: 1) { position series { name } } editions(limit: 1, order_by: { users_count: desc }) { isbn_13 isbn_10 image { url } } } } } }\"}"
       },
       "id": "a1b2c3d4-0003-0003-0003-000000000003",
       "name": "Query Hardcover GraphQL",
@@ -72,7 +83,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst userBooks = data?.data?.me?.[0]?.user_books ?? [];\n\nif (userBooks.length === 0) {\n  return [];\n}\n\nreturn userBooks.map(ub => {\n  const book = ub.book;\n  const title = book?.title ?? 'Unknown Title';\n  const authors = (book?.contributions ?? []).map(c => c.author?.name).filter(Boolean);\n  const author = authors.join(', ') || null;\n  const editions = book?.editions ?? [];\n  const isbn13 = editions[0]?.isbn_13 ?? null;\n  const isbn10 = editions[0]?.isbn_10 ?? null;\n  const isbn = isbn13 || isbn10 || null;\n  const rating = ub.rating ?? null;\n  const updatedAt = ub.updated_at;\n\n  let summary = `Finished reading: ${title}`;\n  if (author) summary += ` by ${author}`;\n  if (rating !== null) {\n    const stars = Math.round(rating);\n    summary += ` ${'\u2605'.repeat(stars)}${'\u2606'.repeat(5 - stars)} (${rating}/5)`;\n  }\n\n  const readOfProps = { name: [title] };\n  if (author) readOfProps.author = [author];\n  if (isbn) readOfProps.uid = [`isbn:${isbn}`];\n\n  const bookSeries = book?.book_series?.[0];\n  if (bookSeries?.series?.name) {\n    readOfProps['book-series'] = [bookSeries.series.name];\n    if (bookSeries.position != null) {\n      readOfProps['book-series-position'] = [String(bookSeries.position)];\n    }\n    if (bookSeries.series.books_count != null) {\n      readOfProps['book-series-count'] = [String(bookSeries.series.books_count)];\n    }\n    if (bookSeries.series.is_completed != null) {\n      readOfProps['book-series-completed'] = [String(bookSeries.series.is_completed)];\n    }\n  }\n\n  if (book?.pages != null) {\n    readOfProps['book-pages'] = [String(book.pages)];\n  }\n  if (book?.release_year != null) {\n    readOfProps['book-release-year'] = [String(book.release_year)];\n  }\n  if (book?.book_category_id != null) {\n    readOfProps['book-category-id'] = [String(book.book_category_id)];\n  }\n\n  const genres = book?.cached_tags?.filter(t => t.category === 'Genre') ?? [];\n  if (genres.length > 0) {\n    readOfProps['book-genres'] = genres.map(g => g.tag);\n  }\n\n  const edition = book?.editions?.[0];\n  if (edition?.image?.url) {\n    readOfProps['book-cover-url'] = [edition.image.url];\n  }\n\n  const micropubBody = {\n    type: ['h-entry'],\n    properties: {\n      summary: [summary],\n      'read-status': ['finished'],\n      'read-of': [{ type: ['h-cite'], properties: readOfProps }],\n      category: ['book'],\n      published: [updatedAt],\n      visibility: ['public'],\n      'post-status': ['published']\n    }\n  };\n\n  return { json: { micropubBody, updatedAt, title } };\n});"
+        "jsCode": "const data = $input.first().json;\nconst userBooks = data?.data?.me?.[0]?.user_books ?? [];\n\nif (userBooks.length === 0) {\n  return [];\n}\n\nreturn userBooks.map(ub => {\n  const book = ub.book;\n  const title = book?.title ?? 'Unknown Title';\n  const hcSlug = book?.slug ?? null;\n  const authors = (book?.contributions ?? []).map(c => c.author?.name).filter(Boolean);\n  const author = authors.join(', ') || null;\n  const editions = book?.editions ?? [];\n  const isbn13 = editions[0]?.isbn_13 ?? null;\n  const isbn10 = editions[0]?.isbn_10 ?? null;\n  const isbn = isbn13 || isbn10 || null;\n  const coverUrl = editions[0]?.image?.url ?? book?.image?.url ?? null;\n  const rating = ub.rating ?? null;\n  const updatedAt = ub.updated_at;\n  const finishedAt = ub.user_book_reads?.[0]?.finished_at ?? null;\n  const journalDate = ub.reading_journals?.[0]?.action_at ?? null;\n  const fallbackDate = finishedAt || journalDate || updatedAt;\n  const seriesEntry = book?.book_series?.[0] ?? null;\n  const seriesName = seriesEntry?.series?.name ?? null;\n  const seriesPos = seriesEntry?.position ?? null;\n  \n  const statusId = ub.status_id;\n  const isFinished = statusId === 3;\n  const readStatus = isFinished ? 'finished' : 'reading';\n  const summaryPrefix = isFinished ? 'Finished reading' : 'Currently reading';\n\n  let summary = `${summaryPrefix}: ${title}`;\n  if (author) summary += ` by ${author}`;\n\n  const readOfProps = { name: [title] };\n  if (author) readOfProps.author = [author];\n  if (isbn) readOfProps.uid = [`isbn:${isbn}`];\n\n  const props = {\n    summary: [summary],\n    'read-status': [readStatus],\n    'read-of': [{ type: ['h-cite'], properties: readOfProps }],\n    category: ['book'],\n    visibility: ['public'],\n    'post-status': ['published']\n  };\n\n  if (rating !== null) {\n    const stars = Math.round(rating);\n    props.summary[0] += ` ${'\u2605'.repeat(stars)}${'\u2606'.repeat(5 - stars)} (${rating}/5)`;\n  }\n  if (coverUrl) props['hardcover-cover'] = [coverUrl];\n  if (isFinished && fallbackDate) props['finished-at'] = [fallbackDate];\n  if (seriesName) props['book-series'] = [seriesName];\n  if (hcSlug) props['hardcover-slug'] = [hcSlug];\n  if (seriesPos != null) props['book-series-position'] = [String(seriesPos)];\n\n  const micropubBody = { type: ['h-entry'], properties: props };\n  return { json: { micropubBody, updatedAt, title } };\n});"
       },
       "id": "a1b2c3d4-0004-0004-0004-000000000004",
       "name": "Build Micropub payloads",
@@ -151,7 +162,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const workflowStaticData = $getWorkflowStaticData('global');\nworkflowStaticData.lastChecked = new Date().toISOString();\nreturn [{ json: { updated: true, lastChecked: workflowStaticData.lastChecked } }];"
+        "jsCode": "// watermark comes from WP REST API (self-healing), no persistence needed\nconst now = new Date().toISOString();\nreturn [{ json: { updated: true, lastChecked: now } }];"
       },
       "id": "a1b2c3d4-0007-0007-0007-000000000007",
       "name": "Update last checked time",
@@ -232,16 +243,18 @@
       ]
     }
   },
-  "pinData": {},
   "settings": {
     "executionOrder": "v1",
     "saveManualExecutions": true,
     "callerPolicy": "workflowsFromSameOwner",
     "errorWorkflow": ""
   },
-  "staticData": null,
-  "tags": [],
-  "triggerCount": 1,
-  "updatedAt": "2026-05-18T21:00:00.000Z",
-  "versionId": "1"
+  "staticData": {
+    "global": {
+      "lastChecked": "2026-05-18T21:53:04Z"
+    }
+  },
+  "pinData": {},
+  "versionId": "1287c36f-4894-42e7-8e5b-3984d6d4be1f",
+  "active": 1
 }

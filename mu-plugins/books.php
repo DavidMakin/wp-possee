@@ -403,6 +403,9 @@ function possee_book_card_html( $post_id, $data, $context = 'single' ) {
 			<?php if ( $context === 'single' && $post_id ) : ?>
 			<?php
 			$hc_slug = get_post_meta( $post_id, 'mf2_hardcover-slug', true );
+			if ( is_array( $hc_slug ) ) {
+				$hc_slug = $hc_slug[0] ?? '';
+			}
 			if ( ! $hc_slug ) {
 				$hc_slug = get_post_field( 'post_name', $post_id );
 			}

@@ -60,7 +60,7 @@ for n in nodes:
         print(n['name'], '| series:', 'series' in params.lower(), '| slug:', 'slug' in params.lower())
 ```
 
-The workflow creates NEW posts via Micropub and does **not** update existing ones — never re-trigger for an existing post.
+The merged workflow (`Hardcover → WordPress (finished + reading)` in n8n) handles all three statuses (reading/want-to-read/finished) in a single pass via `status_id: { _in: [1, 2, 3] }` and dynamic `read-status` in JS. The `possee_micropub_book_deduplicate` filter (microformats.php) updates existing posts when the same ISBN arrives again. Old separate "currently reading" and "bulk import" workflows have been deleted.
 
 ## Plugin notes
 

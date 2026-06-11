@@ -1060,10 +1060,11 @@ function possee_micropub_book_deduplicate( $args ) {
 
 	// Extract book metadata from read-of properties.
 	$book_meta_map = array(
-		'mf2_book-pages'       => 'book-pages',
+		'mf2_book-pages'        => 'book-pages',
 		'mf2_book-release-year' => 'book-release-year',
 		'mf2_book-category-id'  => 'book-category-id',
 		'mf2_book-cover-url'    => 'book-cover-url',
+		'mf2_hardcover-slug'    => 'hardcover-slug',
 	);
 	foreach ( $book_meta_map as $meta_key => $prop_key ) {
 		if ( isset( $props[ $prop_key ][0] ) ) {

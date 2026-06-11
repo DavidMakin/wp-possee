@@ -31,6 +31,20 @@ for r in rows: print(r)
 
 `active: 1` = workflow enabled. `better-sqlite3` not available inside the container — copy out and use Python.
 
+### n8n sqlite: READONLY crash after docker cp
+
+`docker cp` of a modified database.sqlite into a stopped n8n container leaves the file owned by `root:root`. On restart, n8n (runs as UID 1000) crashes with `SQLITE_READONLY: attempt to write a readonly database`. Fix by chowning the volume file directly (bypassing docker cp):
+
+```bash
+docker stop n8n
+cp /tmp/modified.sqlite /var/lib/docker/volumes/n8n_n8n_data/_data/database.sqlite
+chown 1000:1000 /var/lib/docker/volumes/n8n_n8n_data/_data/database.sqlite
+chmod 644 /var/lib/docker/volumes/n8n_n8n_data/_data/database.sqlite
+docker start n8n
+```
+
+The n8n container was started standalone (`docker run`), not via docker-compose. The volume name is `n8n_n8n_data`, mounted at `/home/node/.n8n`.
+
 ### Book post meta: patching missing fields via WP-CLI
 
 When the n8n Hardcover→WordPress workflow creates a book post but nodes were out of date (missing series/cover/slug), patch meta directly:

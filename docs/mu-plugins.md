@@ -40,6 +40,8 @@ Per-file documentation for all mu-plugins at `/var/www/html/wp-content/mu-plugin
 
 **Named functions**: All hooks use named functions (`possee_*` prefix) for grepability. Only closure: `plugins_loaded` (wraps class definition).
 
+**Book meta dedup map**: `$book_meta_map` in `possee_micropub_book_deduplicate` maps Micropub property names (e.g. `hardcover-slug`, `book-pages`, `book-cover-url`) to `mf2_*` meta keys. To add a new book field: (1) add to n8n GraphQL query, (2) add Micropub property in JS payload, (3) add to `$book_meta_map`. No PHP template changes needed if the display code already handles it.
+
 ## `theme-styles.php`
 
 CSS for elements not configurable via Blocksy Customizer. See source for full details.
@@ -92,6 +94,8 @@ Book display and Open Library cover fetching.
 - `blocksy:archive:render-card-layers` (priority 10): renders `book-archive-row`
 - `blocksy:archive:render-card-layer` (priority 10): suppresses `post_meta` on book archive
 - `book-status--{slug}` CSS class drives status badge theming
+
+**`mf2_*` meta caveat**: The Micropub plugin stores all meta values as serialized arrays. `get_post_meta('mf2_hardcover-slug', true)` returns `['exit-strategy']`, not a string. Use the `$possee_meta()` closure in `possee_book_get_data()` for safe unwrapping, or add an `is_array()` check before using raw `get_post_meta()` results. Without this, `esc_attr($array_val)` renders "Array" in HTML.
 
 **Open Library attribution**: Single book pages link to `https://openlibrary.org/isbn/{isbn}`. Rate limit: 100 req/IP/5 min.
 

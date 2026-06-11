@@ -4,7 +4,25 @@ n8n, third-party plugins, and related operational knowledge.
 
 ## Hardcover book backfill: Bearer prefix double-prepend
 
-Hardcover API keys from https://hardcover.app/account/api are **full Authorization header values** (starting with `Bearer `). When using them in PHP `wp_remote_post`, strip the prefix before passing to the script, or check if it's already present:
+Hardcover API keys from https://hardcover.app/account/api are **full Authorization header values** (starting with `Bearer `).
+
+### Hardcover GraphQL: `cached_tags` is a custom scalar
+
+The `cached_tags(path: "Genre")` field on the `book` type is a **custom scalar**, not an object type. Attempting a subselection (`{ tag category }`) causes a validation error:
+
+```
+"unexpected subselection set for non-object field"
+```
+
+The resolver still returns objects with `tag`, `category`, `count`, `tagSlug`, `categorySlug`, and `spoilerRatio` fields — but GraphQL schema validation rejects the subselection. **Omit the subselection**:
+
+```graphql
+# WRONG — validation error:
+cached_tags(path: "Genre") { tag category }
+
+# CORRECT — works, returns same structured data:
+cached_tags(path: "Genre")
+``` When using them in PHP `wp_remote_post`, strip the prefix before passing to the script, or check if it's already present:
 ```php
 $api_key = preg_replace( '/^Bearer\s+/i', '', $raw_key );
 ```
@@ -75,6 +93,36 @@ for n in nodes:
 ```
 
 The merged workflow (`Hardcover → WordPress (finished + reading)` in n8n) handles all three statuses (reading/want-to-read/finished) in a single pass via `status_id: { _in: [1, 2, 3] }` and dynamic `read-status` in JS. The `possee_micropub_book_deduplicate` filter (microformats.php) updates existing posts when the same ISBN arrives again. Old separate "currently reading" and "bulk import" workflows have been deleted.
+
+### n8n `$workflow.staticData`: production-only
+
+`$workflow.staticData` is only available in **production execution mode** (scheduled triggers). In manual/test mode it returns `undefined`. Both read and write must guard against this:
+
+```javascript
+// Read — optional chaining + fallback
+const lastChecked = $workflow.staticData?.lastChecked;
+const result = lastChecked || fallbackValue;
+
+// Write — guard before setting
+if ($workflow.staticData) {
+  $workflow.staticData.lastChecked = now;
+}
+```
+
+Without the guard, manual executions crash with `Cannot set properties of undefined (setting 'lastChecked')`.
+
+### Internal Docker network: use http, not https for nginx
+
+nginx inside the Docker network only listens on **port 80**, not 443. SSL terminates at the Cloudflare tunnel (external). Any container-to-container HTTP request targeting the blog must use `http://nginx/` with a `Host` header so WordPress resolves the correct vhost:
+
+| Component | URL format |
+|---|---|
+| External/cloudflared | `https://blog.sleep-er.co.uk/...` |
+| Internal (Docker) | `http://nginx/...` with `Host: blog.sleep-er.co.uk` |
+
+This applies to n8n HTTP request nodes targeting the WordPress Micropub endpoint. Using `https://blog.sleep-er.co.uk` from within the Docker network resolves to `172.28.0.4:443` (the nginx internal IP) which refuses the connection because no SSL listener exists on that interface.
+
+The loopback-fix mu-plugin (`mu-plugins/loopback-fix.php`) does the same rewrite for WordPress-internal HTTP calls.
 
 ## Plugin notes
 

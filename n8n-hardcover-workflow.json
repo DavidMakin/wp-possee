@@ -24,23 +24,12 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "https://blog.sleep-er.co.uk/wp-json/possee/v1/last-checked",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "User-Agent",
-              "value": "n8n"
-            }
-          ]
-        },
-        "options": {}
+        "jsCode": "const lc = $workflow.staticData?.lastChecked;\nif (lc) {\n  return [{ json: { lastChecked: lc } }];\n}\nconst d = new Date();\nd.setDate(d.getDate() - 7);\nreturn [{ json: { lastChecked: d.toISOString() } }];"
       },
       "id": "a1b2c3d4-0002-0002-0002-000000000002",
       "name": "Get last checked time",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         460,
         300
@@ -64,7 +53,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={\"query\":\"query { me { user_books(where: { status_id: { _in: [1, 2, 3] }, updated_at: { _gt: \\\"{{ $json.lastChecked }}\\\" } }, order_by: { updated_at: asc }) { id updated_at rating status_id user_book_reads(order_by: { id: desc }, limit: 1) { finished_at } reading_journals(where: { event: { _in: [\\\"rated\\\", \\\"status_read\\\", \\\"finished\\\"] } }, order_by: { action_at: desc }, limit: 1) { action_at event } book { slug title pages release_year book_category_id cached_tags(path: \\\"Genre\\\") { tag category } image { url } contributions { author { name } } book_series(order_by: { position: asc }, limit: 1) { position series { name books_count is_completed } } editions(limit: 1, order_by: { users_count: desc }) { isbn_13 isbn_10 image { url } } } } } }\"}"
+        "body": "={\"query\":\"query { me { user_books(where: { status_id: { _in: [1, 2, 3] }, updated_at: { _gt: \\\"{{ $json.lastChecked }}\\\" } }, order_by: { updated_at: asc }) { id updated_at rating status_id user_book_reads(order_by: { id: desc }, limit: 1) { finished_at } reading_journals(where: { event: { _in: [\\\"rated\\\", \\\"status_read\\\", \\\"finished\\\"] } }, order_by: { action_at: desc }, limit: 1) { action_at event } book { slug title pages release_year book_category_id cached_tags(path: \\\"Genre\\\") image { url } contributions { author { name } } book_series(order_by: { position: asc }, limit: 1) { position series { name books_count is_completed } } editions(limit: 1, order_by: { users_count: desc }) { isbn_13 isbn_10 image { url } } } } } }\"}"
       },
       "id": "a1b2c3d4-0003-0003-0003-000000000003",
       "name": "Query Hardcover GraphQL",
@@ -128,7 +117,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://blog.sleep-er.co.uk/wp-json/micropub/1.0/endpoint",
+        "url": "http://nginx/wp-json/micropub/1.0/endpoint",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
@@ -137,6 +126,10 @@
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "Host",
+              "value": "blog.sleep-er.co.uk"
             }
           ]
         },
@@ -162,7 +155,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// watermark comes from WP REST API (self-healing), no persistence needed\nconst now = new Date().toISOString();\nreturn [{ json: { updated: true, lastChecked: now } }];"
+        "jsCode": "const now = new Date().toISOString();\nif ($workflow.staticData) {\n  $workflow.staticData.lastChecked = now;\n}\nreturn [{ json: { updated: true, lastChecked: now } }];"
       },
       "id": "a1b2c3d4-0007-0007-0007-000000000007",
       "name": "Update last checked time",

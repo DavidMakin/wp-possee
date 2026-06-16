@@ -853,6 +853,45 @@ function possee_quill_footer( $content ) {
 	return $content . '<p class="checkin-via"><a href="https://quill.p3k.io/" rel="noopener">Added via Quill</a></p>';
 }
 
+/**
+ * Render mf2_photo entries as <figure class="u-photo"> elements appended after
+ * e-content.  Micropub\Render::render_content is suppressed site-wide (see
+ * possee_remove_micropub_render) to prevent duplicate e-content wrappers, so
+ * we replicate its photo rendering here.
+ *
+ * mf2_photo is stored as a serialised array of items, each either a plain URL
+ * string or an array with 'value' (URL) and optional 'alt' keys.
+ */
+add_filter( 'the_content', 'possee_render_micropub_photos', 21 );
+function possee_render_micropub_photos( $content ) {
+	if ( ! is_singular() || ! in_the_loop() ) {
+		return $content;
+	}
+	$post_id = get_the_ID();
+	$photos  = get_post_meta( $post_id, 'mf2_photo', true );
+	if ( empty( $photos ) || ! is_array( $photos ) ) {
+		return $content;
+	}
+
+	$html = '';
+	foreach ( $photos as $photo ) {
+		if ( is_string( $photo ) && $photo ) {
+			$url = esc_url( $photo );
+			$alt = '';
+		} elseif ( is_array( $photo ) && ! empty( $photo['value'] ) ) {
+			$url = esc_url( $photo['value'] );
+			$alt = isset( $photo['alt'] ) ? esc_attr( $photo['alt'] ) : '';
+		} else {
+			continue;
+		}
+		$html .= '<figure class="micropub-photo">'
+			. '<img class="u-photo" src="' . $url . '" alt="' . $alt . '" loading="lazy">'
+			. '</figure>';
+	}
+
+	return $content . $html;
+}
+
 add_filter( 'the_content', 'possee_strip_syndication_links', 999 );
 function possee_strip_syndication_links( $content ) {
 	if ( is_singular() ) {

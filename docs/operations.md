@@ -41,12 +41,13 @@ docker run --rm \
 ## Cache layers (3 independent caches)
 
 | Cache | Reset method | Notes |
-|---|---|---|
+|---|---|---|---|
 | OPcache | Recomputed ~5s after file change | `revalidate_freq = 0`, `validate_timestamps = 1` → checks mtime every request |
 | nginx fastcgi | `docker compose up -d --force-recreate nginx` | Also clears on container recreate. Not persistent across restarts. |
 | WP-Optimize disk cache | `rm -rf .../cache/wpo-cache/` on `wp-possee_wp_data` volume | 24h TTL. Survives nginx/wordpress restarts. Must be purged separately. |
+| Cloudflare CDN | Cloudflare dashboard → Cache → Purge | HTML has `s-maxage=3600` (set by WP-Optimize). Cloudflare serves stale cached HTML for up to 1h after update. No API credentials configured — manual purge required. |
 
-**Never skip clearing all three after a PHP change** — they are independent. A stale cache in any layer can mask your output.
+**Never skip clearing all three after a PHP change** — they are independent. A stale cache in any layer can mask your output. If Cloudflare shows `cf-cache-status: HIT` after a test, add a cache-busting query param (`?v=N`) or purge at the Cloudflare dashboard.
 
 ## Verifying PHP changes (bypassing Cloudflare)
 

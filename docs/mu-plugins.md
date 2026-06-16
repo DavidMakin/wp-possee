@@ -32,6 +32,11 @@ Per-file documentation for all mu-plugins at `/var/www/html/wp-content/mu-plugin
 - `syn_link_mapping`: maps `hachyderm.io` → `mastodon` icon
 - `the_content` (priority 20): wraps singular content in `<div class="e-content">`
 
+**Micropub photo rendering**
+- `Micropub\Render::render_content` is suppressed globally (priority 10) — avoids duplicate `e-content` wrapper but also kills plugin's built-in photo/gallery insertion
+- `possee_render_micropub_photos` on `the_content` (priority 21) reads `mf2_photo` post meta and renders each photo as `<figure class="micropub-photo"><img class="u-photo">` after the `e-content` div
+- Handles both plain URL strings and `{value, alt}` objects (Micropub spec format)
+
 **Category cleanup**
 - `get_the_terms`: hides Uncategorised/Uncategorized from display
 

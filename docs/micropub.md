@@ -55,4 +55,40 @@ The suppress-then-append order is correct: likes get cleared of the generic "Bri
 | `the_content` | 11, 12 | Simple Location | Map + location text |
 | `the_content` | 15 | `possee_book_card_html` | Prepends book card on 'book' posts |
 | `the_content` | 20 | `possee_wrap_econtent` | Wraps in e-content + hidden dt-published/u-url |
+| `the_content` | 21 | `possee_render_micropub_photos` | Renders mf2_photo entries as u-photo figures |
 | `the_content` | 999 | Syndication strip | Removes syndication-links div on non-singular |
+
+## Micropub photo extraction for syndication
+
+When Micropub posts contain Gutenberg image blocks, the images must be extracted into `mf2_photo` post meta for syndication to Bluesky/Mastodon to work correctly.
+
+**Two extraction paths:**
+
+### 1. During Micropub post creation
+`possee_extract_micropub_gutenberg_photos()` hooks `pre_insert_micropub_post` at priority 2 (after logging, before insertion):
+- Parses Gutenberg `<!-- wp:image {id:...} -->` blocks via regex
+- Extracts image IDs and fetches full URLs via `wp_get_attachment_image_src()`
+- Stores as `mf2_photo` serialized array in `meta_input` before post insert
+- Skips if `mf2_photo` already in payload (don't override Micropub request photos)
+
+### 2. When posts edited in wp-admin
+`possee_extract_gutenberg_photos()` hooks `save_post` at priority 10:
+- Runs when posts saved from WordPress editor
+- Extracts Gutenberg image blocks from post_content into `mf2_photo` meta
+- Only processes if post is published and doesn't already have `mf2_photo`
+
+### Photo rendering
+`possee_render_micropub_photos()` hooks `the_content` at priority 21:
+- Reads `mf2_photo` post meta (serialized array with 'value' and 'alt' keys)
+- Renders `<figure class="micropub-photo"><img class="u-photo" ... ></figure>` after content
+- Photos available to microformat readers and Bridgy for syndication
+
+**Schema**: `mf2_photo` is stored as serialized PHP array per Micropub spec:
+```php
+[
+    ['value' => 'https://...', 'alt' => 'photo description'],
+    ['value' => 'https://...', 'alt' => ''],
+]
+```
+
+**Known issue**: Syndication Links plugin has a "post too old" check (~3.7 days) that blocks re-syndication of existing posts. Posts edited after creation won't re-syndicate to social networks even if images are added. Manual intervention required (clear `syndication_log` meta, call `syn_syndication` action, or manually trigger Bridgy).

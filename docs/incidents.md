@@ -1,5 +1,92 @@
 # Incident Log
 
+## 2026-06-16: Missing Images on Bluesky Syndication
+
+### Summary
+Post https://blog.sleep-er.co.uk/notes/2026-06-12-19-26/ syndicates text to Bluesky but images don't appear. Root cause: Micropub photo extraction pipeline was incomplete — images added to posts via editor after creation weren't being captured into `mf2_photo` post meta required for syndication.
+
+### Timeline
+
+**June 12 19:26 UTC - Post Created**
+- Note post created via Micropub (Quill) with only text, no images
+- Syndicated to Bluesky immediately (post_id 3787)
+
+**June 16 09:58 UTC - Images Added**
+- Post edited in WordPress admin, two Gutenberg image blocks added
+- Images visible on blog (rendered from post_content)
+- **But not captured into `mf2_photo` post meta** (syndication requires this)
+
+**June 16 14:26 UTC - Issue Reported**
+- User notices images missing from Bluesky post while present on blog
+- Post too old for automatic re-syndication (Syndication Links blocks posts >3.7 days)
+
+### Root Cause
+
+The Micropub photo extraction pipeline had a critical gap:
+
+1. **Micropub post creation**: When posts created via Micropub with Gutenberg images → images NOT extracted to `mf2_photo`
+2. **Post editing**: When posts edited in wp-admin to add images → images NOT extracted to `mf2_photo`
+3. **Rendering**: Photos rendered from `mf2_photo` meta only (if it existed), ignoring post_content Gutenberg blocks
+
+This meant:
+- Micropub photos with images: not captured for syndication
+- Posts edited to add images: image changes never propagated to syndication
+
+### Impact
+
+- Post 3787 images missing from Bluesky
+- Syndication "too old" check prevented re-sending with images
+- Future posts with Gutenberg images would have same issue
+
+### Resolution
+
+Implemented photo extraction in two paths:
+
+1. **`possee_extract_micropub_gutenberg_photos()`** — hooks `pre_insert_micropub_post` priority 2
+   - Runs during Micropub post creation
+   - Parses Gutenberg `<!-- wp:image {id:...} -->` blocks
+   - Extracts image URLs into `meta_input['mf2_photo']` before post insert
+
+2. **`possee_extract_gutenberg_photos()`** — hooks `save_post` priority 10
+   - Runs when posts edited in wp-admin
+   - Extracts Gutenberg blocks into `mf2_photo` post meta
+   - Skips if photos already exist (don't override Micropub payload)
+
+Changes deployed June 16 14:26. Post 3787 backfilled with `mf2_photo` meta manually.
+
+### Lessons Learned
+
+#### Micropub Plugin Doesn't Extract Content to Meta
+- Micropub plugin stores content as Gutenberg blocks in `post_content`
+- It does NOT extract images, galleries, or other structured content to post meta
+- Custom extraction needed for any meta-based syndication use cases
+
+#### Multiple Content Creation Paths = Multiple Extraction Hooks
+- Micropub API posts: need `pre_insert_micropub_post` hook
+- WordPress admin posts: need `save_post` hook
+- Both paths can add/modify Gutenberg blocks
+- Single extraction point (e.g., only in rendering) insufficient
+
+#### Syndication Age Limits Block Updates
+- Syndication Links plugin refuses to re-send posts older than ~3.7 days
+- Intentional to prevent spam, but blocks legitimate image updates
+- Workaround: clear `syndication_log` meta to allow manual retry, or use `syn_syndication` action directly
+
+### Prevention
+
+1. Document photo extraction requirements in micropub.md (updated)
+2. Add image extraction test for new Micropub posts
+3. Monitor syndication_log for "too old" errors on edits
+
+### Next Steps
+
+- [ ] Manually trigger Bridgy to re-fetch post 3787 with updated mf2_photo
+- [ ] Verify images appear on Bluesky post
+- [ ] Test new Micropub posts with images to confirm extraction works
+- [ ] Test wp-admin image edits to confirm extraction works
+
+---
+
 ## 2026-06-16: Hardcover Sync Outage & Database Corruption
 
 ### Summary

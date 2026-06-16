@@ -19,6 +19,9 @@ Per-file documentation for all mu-plugins at `/var/www/html/wp-content/mu-plugin
 - `possee_clear_post_page_cache($post_id)`: clears WP-Optimize disk cache for the post URL
 - `possee_ping_bridgy_discover($post_id)`: POSTs to `https://brid.gy/discover`
 
+**Custom post type syndication via wp-admin**
+- `possee_syndicate_save_post` on `save_post` (priority 20): WordPress's `do_pings` cron action only fires for the native `post` type; custom types like `note`, `checkin`, `book` are invisible to Syndication Links' cron system. This hook fires after Syndication Links' `save_post` (priority 10) has stored `_syndicate-to` meta, then immediately triggers `syn_syndication` for published/future CPTs. Fixes: (1) notes created in wp-admin with syndication checkboxes now actually syndicate, (2) editing an existing note in wp-admin to add syndication targets now works.
+
 **Syndication Links as Blocksy Card Element**
 - `reading_time` meta element: word-count → "N min read"
 - `syndication_links` meta element: renders syndication link icons

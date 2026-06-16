@@ -90,6 +90,16 @@ Then update `mf2_syndication` post meta to replace `https://brid.gy/publish/blue
 
 **Permanent fix**: `microformats.php` intercepts `micropub_syndication` at priorities 1 and 99, uses `pre_http_request` to block the immediate Bridgy send, and schedules `possee_bridgy_delayed` cron for 90 seconds later. Do not remove this — it prevents the race condition.
 
+## Custom post types (note/checkin/book) not syndicated when created in wp-admin
+
+**Root cause**: `Syndication_Links` depends on WordPress's `do_pings` cron action to process syndication queues. `do_pings` is only scheduled by `_publish_post_hook`, which only registers for the native `post` type. When a note/checkin/book is created/edited in wp-admin with syndication targets, Syndication Links stores `_syndicate-to` meta at priority 10 on `save_post`, but `do_pings` never fires for custom types — the post is stuck in the queue indefinitely.
+
+**Diagnosis**: Note created in wp-admin appears on site with no syndication links. Check meta: `wp post meta get <ID> _syndicate-to` returns the UID, but `syndication_link` meta is empty. Check Bridgy log: post is not mentioned.
+
+**Permanent fix**: `possee_syndicate_save_post` hook in `microformats.php` (priority 20 on `save_post`): (1) only processes `note`, `checkin`, `book` types, (2) skips unless status is `publish` or `future`, (3) reads `_syndicate-to` meta that Syndication Links set at priority 10, (4) calls `do_action('syn_syndication', $post_id, $syndicate_to)` directly, bypassing the broken `do_pings` cron system.
+
+**One-off recovery** (for posts published before the fix): `wp post list --post_type=note --field=ID | xargs -I {} sh -c 'test -n "$(wp post meta get {} _syndicate-to 2>/dev/null)" && wp post update {} --edit'` — re-save each note with syndication targets, triggering the new handler.
+
 ## Delayed cron handler
 
 `possee_bridgy_delayed_handler` sequence (fires 90s after Micropub post):

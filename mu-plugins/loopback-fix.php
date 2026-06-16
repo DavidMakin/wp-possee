@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Plugin Name: Loopback Request Fix
  * Description: Rewrites internal WordPress loopback requests from https://domain:443
@@ -10,39 +11,39 @@
  * http_request_args (fires before URL validation), then rewrite in pre_http_request.
  */
 
-defined( 'ABSPATH' ) || exit;
+defined('ABSPATH') || exit;
 
-add_filter( 'http_request_args', function ( $args, $url ) {
-	$site_host = parse_url( home_url(), PHP_URL_HOST );
-	if ( $site_host && strpos( $url, 'https://' . $site_host ) === 0 ) {
-		$args['reject_unsafe_urls'] = false;
-	}
-	return $args;
-}, 1, 2 );
+add_filter('http_request_args', function ($args, $url) {
+    $site_host = parse_url(home_url(), PHP_URL_HOST);
+    if ($site_host && strpos($url, 'https://' . $site_host) === 0) {
+        $args['reject_unsafe_urls'] = false;
+    }
+    return $args;
+}, 1, 2);
 
-add_filter( 'pre_http_request', function ( $preempt, $parsed_args, $url ) {
-	static $in_progress = false;
-	if ( $in_progress ) {
-		return $preempt;
-	}
+add_filter('pre_http_request', function ($preempt, $parsed_args, $url) {
+    static $in_progress = false;
+    if ($in_progress) {
+        return $preempt;
+    }
 
-	$site_host = parse_url( home_url(), PHP_URL_HOST );
+    $site_host = parse_url(home_url(), PHP_URL_HOST);
 
-	if ( ! $site_host || strpos( $url, 'https://' . $site_host ) !== 0 ) {
-		return $preempt;
-	}
+    if (! $site_host || strpos($url, 'https://' . $site_host) !== 0) {
+        return $preempt;
+    }
 
-	$in_progress = true;
+    $in_progress = true;
 
-	$internal_url = preg_replace( '#^https://' . preg_quote( $site_host, '#' ) . '#', 'http://nginx', $url );
+    $internal_url = preg_replace('#^https://' . preg_quote($site_host, '#') . '#', 'http://nginx', $url);
 
-	if ( ! isset( $parsed_args['headers'] ) || is_string( $parsed_args['headers'] ) ) {
-		$parsed_args['headers'] = [];
-	}
-	$parsed_args['headers']['Host'] = $site_host;
+    if (! isset($parsed_args['headers']) || is_string($parsed_args['headers'])) {
+        $parsed_args['headers'] = [];
+    }
+    $parsed_args['headers']['Host'] = $site_host;
 
-	$response    = wp_remote_request( $internal_url, $parsed_args );
-	$in_progress = false;
+    $response    = wp_remote_request($internal_url, $parsed_args);
+    $in_progress = false;
 
-	return $response;
-}, 10, 3 );
+    return $response;
+}, 10, 3);

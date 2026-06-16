@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Comment & Webmention handling.
  *
@@ -11,7 +12,7 @@
  * - Capture p-swarm-coins from OwnYourSwarm coin Webmention microformats into comment meta
  */
 
-defined( 'ABSPATH' ) || exit;
+defined('ABSPATH') || exit;
 
 /**
  * Capture p-swarm-coins from OwnYourSwarm coin Webmention microformats.
@@ -21,17 +22,18 @@ defined( 'ABSPATH' ) || exit;
  * parsed data and persist it as comment meta, so that
  * possee_absorb_swarm_coin_webmention can read it on wp_insert_comment.
  */
-add_filter( 'webmention_handler_mf2_set_properties', 'possee_capture_swarm_coins_meta', 10, 2 );
-function possee_capture_swarm_coins_meta( $meta, $handler ) {
-	$item = $handler->get_webmention_item();
-	if ( ! $item ) {
-		return $meta;
-	}
-	$raw = $item->get_raw();
-	if ( ! empty( $raw['properties']['swarm-coins'][0] ) ) {
-		$meta['p-swarm-coins'] = $raw['properties']['swarm-coins'][0];
-	}
-	return $meta;
+add_filter('webmention_handler_mf2_set_properties', 'possee_capture_swarm_coins_meta', 10, 2);
+function possee_capture_swarm_coins_meta($meta, $handler)
+{
+    $item = $handler->get_webmention_item();
+    if (! $item) {
+        return $meta;
+    }
+    $raw = $item->get_raw();
+    if (! empty($raw['properties']['swarm-coins'][0])) {
+        $meta['p-swarm-coins'] = $raw['properties']['swarm-coins'][0];
+    }
+    return $meta;
 }
 
 /**
@@ -43,150 +45,158 @@ function possee_capture_swarm_coins_meta( $meta, $handler ) {
  *   swarm_score_items  (array of {points, icon, message})
  * and then delete the comment so coins never appear in the comment thread.
  */
-add_action( 'wp_insert_comment', 'possee_absorb_swarm_coin_webmention', 10, 2 );
-function possee_absorb_swarm_coin_webmention( $comment_id, $comment ) {
-	// Must be from swarmapp.com author URL.
-	if ( strpos( $comment->comment_author_url, 'swarmapp.com' ) === false ) {
-		return;
-	}
+add_action('wp_insert_comment', 'possee_absorb_swarm_coin_webmention', 10, 2);
+function possee_absorb_swarm_coin_webmention($comment_id, $comment)
+{
+    // Must be from swarmapp.com author URL.
+    if (strpos($comment->comment_author_url, 'swarmapp.com') === false) {
+        return;
+    }
 
-	// Must have a p-swarm-coins meta value.
-	$points = (int) get_comment_meta( $comment_id, 'p-swarm-coins', true );
-	if ( ! $points ) {
-		return;
-	}
+    // Must have a p-swarm-coins meta value.
+    $points = (int) get_comment_meta($comment_id, 'p-swarm-coins', true);
+    if (! $points) {
+        return;
+    }
 
-	$post_id = (int) $comment->comment_post_ID;
-	if ( ! $post_id ) {
-		return;
-	}
+    $post_id = (int) $comment->comment_post_ID;
+    if (! $post_id) {
+        return;
+    }
 
-	// Icon is the comment author avatar (stored by Webmention plugin as comment_author_email or meta).
-	$icon = get_comment_meta( $comment_id, 'avatar', true );
-	if ( ! $icon ) {
-		// Semantic Linkbacks stores it differently — fall back to author photo meta.
-		$icon = get_comment_meta( $comment_id, 'semantic_linkbacks_author_photo', true );
-	}
-	if ( ! $icon ) {
-		$icon = 'https://ss1.4sqi.net/img/points/coin_icon_coin.png';
-	}
+    // Icon is the comment author avatar (stored by Webmention plugin as comment_author_email or meta).
+    $icon = get_comment_meta($comment_id, 'avatar', true);
+    if (! $icon) {
+        // Semantic Linkbacks stores it differently — fall back to author photo meta.
+        $icon = get_comment_meta($comment_id, 'semantic_linkbacks_author_photo', true);
+    }
+    if (! $icon) {
+        $icon = 'https://ss1.4sqi.net/img/points/coin_icon_coin.png';
+    }
 
-	$message = wp_strip_all_tags( $comment->comment_content );
+    $message = wp_strip_all_tags($comment->comment_content);
 
-	// Append to swarm_score_items.
-	$items   = get_post_meta( $post_id, 'swarm_score_items', true );
-	$items   = is_array( $items ) ? $items : array();
-	$items[] = array(
-		'points'  => $points,
-		'icon'    => $icon,
-		'message' => $message,
-	);
-	update_post_meta( $post_id, 'swarm_score_items', $items );
+    // Append to swarm_score_items.
+    $items   = get_post_meta($post_id, 'swarm_score_items', true);
+    $items   = is_array($items) ? $items : array();
+    $items[] = array(
+        'points'  => $points,
+        'icon'    => $icon,
+        'message' => $message,
+    );
+    update_post_meta($post_id, 'swarm_score_items', $items);
 
-	// Update running total.
-	$total = (int) get_post_meta( $post_id, 'swarm_score_total', true );
-	update_post_meta( $post_id, 'swarm_score_total', $total + $points );
+    // Update running total.
+    $total = (int) get_post_meta($post_id, 'swarm_score_total', true);
+    update_post_meta($post_id, 'swarm_score_total', $total + $points);
 
-	// Remove the comment — coins are not human replies.
-	wp_delete_comment( $comment_id, true );
+    // Remove the comment — coins are not human replies.
+    wp_delete_comment($comment_id, true);
 }
 
-add_filter( 'get_comments_number', 'possee_get_comments_number', 10, 2 );
-function possee_get_comments_number( $count, $post_id ) {
-	if ( ! $post_id ) {
-		return $count;
-	}
-	$cache_key = 'possee_non_comment_count_' . $post_id;
-	$non_count = wp_cache_get( $cache_key, 'comments' );
-	if ( false !== $non_count ) {
-		return (int) $count - (int) $non_count;
-	}
-	$webmention_types = function_exists( 'get_webmention_comment_type_names' )
-		? get_webmention_comment_type_names()
-		: array( 'webmention', 'pingback', 'trackback' );
-	$placeholders     = implode( ',', array_fill( 0, count( $webmention_types ), '%s' ) );
-	global $wpdb;
+add_filter('get_comments_number', 'possee_get_comments_number', 10, 2);
+function possee_get_comments_number($count, $post_id)
+{
+    if (! $post_id) {
+        return $count;
+    }
+    $cache_key = 'possee_non_comment_count_' . $post_id;
+    $non_count = wp_cache_get($cache_key, 'comments');
+    if (false !== $non_count) {
+        return (int) $count - (int) $non_count;
+    }
+    $webmention_types = function_exists('get_webmention_comment_type_names')
+        ? get_webmention_comment_type_names()
+        : array( 'webmention', 'pingback', 'trackback' );
+    $placeholders     = implode(',', array_fill(0, count($webmention_types), '%s'));
+    global $wpdb;
 	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$non_count = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT COUNT(*) FROM {$wpdb->comments} WHERE comment_post_ID = %d AND comment_type IN ({$placeholders}) AND comment_approved = '1'",
-		array_merge( array( $post_id ), $webmention_types )
-	) );
-	wp_cache_set( $cache_key, $non_count, 'comments' );
-	return (int) $count - $non_count;
+    $non_count = (int) $wpdb->get_var($wpdb->prepare(
+        "SELECT COUNT(*) FROM {$wpdb->comments} WHERE comment_post_ID = %d AND comment_type IN ({$placeholders}) AND comment_approved = '1'",
+        array_merge(array( $post_id ), $webmention_types)
+    ));
+    wp_cache_set($cache_key, $non_count, 'comments');
+    return (int) $count - $non_count;
 }
 
-add_action( 'wp_update_comment_count', 'possee_clear_comment_count_cache' );
-function possee_clear_comment_count_cache( $post_id ) {
-	wp_cache_delete( 'possee_non_comment_count_' . $post_id, 'comments' );
+add_action('wp_update_comment_count', 'possee_clear_comment_count_cache');
+function possee_clear_comment_count_cache($post_id)
+{
+    wp_cache_delete('possee_non_comment_count_' . $post_id, 'comments');
 }
 
-add_action( 'pre_get_comments', 'possee_pre_get_comments_save_type_not_in', 9 );
-function possee_pre_get_comments_save_type_not_in( $query ) {
-	$meta_query = $query->query_vars['meta_query'] ?? array();
-	if ( empty( $meta_query ) ) {
-		return;
-	}
-	foreach ( $meta_query as $mq ) {
-		if ( is_array( $mq ) && isset( $mq['key'] ) && 'semantic_linkbacks_type' === $mq['key'] ) {
-			if ( ! empty( $query->query_vars['type__not_in'] ) ) {
-				$query->_sl_saved_type_not_in = $query->query_vars['type__not_in'];
-			}
-			return;
-		}
-	}
+add_action('pre_get_comments', 'possee_pre_get_comments_save_type_not_in', 9);
+function possee_pre_get_comments_save_type_not_in($query)
+{
+    $meta_query = $query->query_vars['meta_query'] ?? array();
+    if (empty($meta_query)) {
+        return;
+    }
+    foreach ($meta_query as $mq) {
+        if (is_array($mq) && isset($mq['key']) && 'semantic_linkbacks_type' === $mq['key']) {
+            if (! empty($query->query_vars['type__not_in'])) {
+                $query->_sl_saved_type_not_in = $query->query_vars['type__not_in'];
+            }
+            return;
+        }
+    }
 }
 
-add_action( 'pre_get_comments', 'possee_pre_get_comments_restore_type_not_in', 11 );
-function possee_pre_get_comments_restore_type_not_in( $query ) {
-	$meta_query = $query->query_vars['meta_query'] ?? array();
-	if ( empty( $meta_query ) || empty( $query->query_vars['type__not_in'] ) ) {
-		return;
-	}
-	foreach ( $meta_query as $mq ) {
-		if ( is_array( $mq ) && isset( $mq['key'] ) && 'semantic_linkbacks_type' === $mq['key'] ) {
-			if ( isset( $query->_sl_saved_type_not_in ) ) {
-				$query->query_vars['type__not_in'] = $query->_sl_saved_type_not_in;
-			} else {
-				$query->query_vars['type__not_in'] = array_diff(
-					$query->query_vars['type__not_in'],
-					get_webmention_comment_type_names()
-				);
-			}
-			return;
-		}
-	}
+add_action('pre_get_comments', 'possee_pre_get_comments_restore_type_not_in', 11);
+function possee_pre_get_comments_restore_type_not_in($query)
+{
+    $meta_query = $query->query_vars['meta_query'] ?? array();
+    if (empty($meta_query) || empty($query->query_vars['type__not_in'])) {
+        return;
+    }
+    foreach ($meta_query as $mq) {
+        if (is_array($mq) && isset($mq['key']) && 'semantic_linkbacks_type' === $mq['key']) {
+            if (isset($query->_sl_saved_type_not_in)) {
+                $query->query_vars['type__not_in'] = $query->_sl_saved_type_not_in;
+            } else {
+                $query->query_vars['type__not_in'] = array_diff(
+                    $query->query_vars['type__not_in'],
+                    get_webmention_comment_type_names()
+                );
+            }
+            return;
+        }
+    }
 }
 
-add_filter( 'semantic_linkbacks_enhance_comment_types', 'possee_enhance_comment_types' );
-function possee_enhance_comment_types( $types ) {
-	$types[] = 'like';
-	return $types;
+add_filter('semantic_linkbacks_enhance_comment_types', 'possee_enhance_comment_types');
+function possee_enhance_comment_types($types)
+{
+    $types[] = 'like';
+    return $types;
 }
 
-add_filter( 'get_comment_text', 'possee_suppress_bridgy_response', 13, 2 );
-function possee_suppress_bridgy_response( $text, $comment ) {
-	if ( isset( $comment->comment_type ) && 'like' === $comment->comment_type && 'Bridgy Response' === trim( $text ) ) {
-		return '';
-	}
-	return $text;
+add_filter('get_comment_text', 'possee_suppress_bridgy_response', 13, 2);
+function possee_suppress_bridgy_response($text, $comment)
+{
+    if (isset($comment->comment_type) && 'like' === $comment->comment_type && 'Bridgy Response' === trim($text)) {
+        return '';
+    }
+    return $text;
 }
 
-add_filter( 'get_comment_text', 'possee_via_label', 13, 2 );
-function possee_via_label( $text, $comment ) {
-	if ( 'webmention' !== get_comment_meta( $comment->comment_ID, 'protocol', true ) ) {
-		return $text;
-	}
-	$source_url = get_comment_meta( $comment->comment_ID, 'webmention_source_url', true );
-	if ( ! $source_url ) {
-		return $text;
-	}
-	$via = 'webmention';
-	if ( preg_match( '#/comment/mastodon/#i', $source_url ) || preg_match( '#/repost/mastodon/#i', $source_url ) ) {
-		$via = 'Mastodon';
-	} elseif ( preg_match( '#/comment/bluesky/#i', $source_url ) || preg_match( '#/like/bluesky/#i', $source_url ) ) {
-		$via = 'Bluesky';
-	}
-	return $text . sprintf( ' (via %s)', $via );
+add_filter('get_comment_text', 'possee_via_label', 13, 2);
+function possee_via_label($text, $comment)
+{
+    if ('webmention' !== get_comment_meta($comment->comment_ID, 'protocol', true)) {
+        return $text;
+    }
+    $source_url = get_comment_meta($comment->comment_ID, 'webmention_source_url', true);
+    if (! $source_url) {
+        return $text;
+    }
+    $via = 'webmention';
+    if (preg_match('#/comment/mastodon/#i', $source_url) || preg_match('#/repost/mastodon/#i', $source_url)) {
+        $via = 'Mastodon';
+    } elseif (preg_match('#/comment/bluesky/#i', $source_url) || preg_match('#/like/bluesky/#i', $source_url)) {
+        $via = 'Bluesky';
+    }
+    return $text . sprintf(' (via %s)', $via);
 }
 
 /**
@@ -194,33 +204,34 @@ function possee_via_label( $text, $comment ) {
  * the fallback Gravatar (mm.jpg), because comment_author_email is empty for
  * Bridgy-pushed webmentions.
  */
-add_filter( 'get_avatar_url', 'possee_webmention_avatar_url', 10, 3 );
-function possee_webmention_avatar_url( $url, $id_or_email, $args ) {
-	if ( is_object( $id_or_email ) && isset( $id_or_email->comment_ID ) ) {
-		$photo = get_comment_meta( $id_or_email->comment_ID, 'semantic_linkbacks_author_photo', true );
-		if ( $photo ) {
-			return $photo;
-		}
-	}
-	return $url;
+add_filter('get_avatar_url', 'possee_webmention_avatar_url', 10, 3);
+function possee_webmention_avatar_url($url, $id_or_email, $args)
+{
+    if (is_object($id_or_email) && isset($id_or_email->comment_ID)) {
+        $photo = get_comment_meta($id_or_email->comment_ID, 'semantic_linkbacks_author_photo', true);
+        if ($photo) {
+            return $photo;
+        }
+    }
+    return $url;
 }
 
-add_filter( 'webmention_comment_data', 'possee_spam_bsky_self_comments', 22 );
-function possee_spam_bsky_self_comments( $commentdata ) {
-	if ( ! $commentdata || is_wp_error( $commentdata ) ) {
-		return $commentdata;
-	}
-	// Block bsky.app self-pingbacks.
-	if ( ( $commentdata['comment_author'] ?? '' ) === 'bsky.app' ) {
-		$commentdata['comment_approved'] = 'spam';
-		return $commentdata;
-	}
-	// Block Bridgy Fed bouncing our own POSSE'd Bluesky posts back as webmentions.
-	// Source pattern: https://brid.gy/post/bluesky/{own-DID}/...
-	$source = $commentdata['comment_meta']['webmention_source_url'] ?? $commentdata['source'] ?? '';
-	if ( $source && preg_match( '#brid\.gy/post/bluesky/did:plc:eemo37qp56jdqiier5krh537/#', $source ) ) {
-		$commentdata['comment_approved'] = 'spam';
-	}
-	return $commentdata;
+add_filter('webmention_comment_data', 'possee_spam_bsky_self_comments', 22);
+function possee_spam_bsky_self_comments($commentdata)
+{
+    if (! $commentdata || is_wp_error($commentdata)) {
+        return $commentdata;
+    }
+    // Block bsky.app self-pingbacks.
+    if (( $commentdata['comment_author'] ?? '' ) === 'bsky.app') {
+        $commentdata['comment_approved'] = 'spam';
+        return $commentdata;
+    }
+    // Block Bridgy Fed bouncing our own POSSE'd Bluesky posts back as webmentions.
+    // Source pattern: https://brid.gy/post/bluesky/{own-DID}/...
+    $source = $commentdata['comment_meta']['webmention_source_url'] ?? $commentdata['source'] ?? '';
+    if ($source && preg_match('#brid\.gy/post/bluesky/did:plc:eemo37qp56jdqiier5krh537/#', $source)) {
+        $commentdata['comment_approved'] = 'spam';
+    }
+    return $commentdata;
 }
-

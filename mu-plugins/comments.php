@@ -8,9 +8,31 @@
  * - Suppress "Bridgy Response" text for likes
  * - "via [Platform]" label on webmention comments
  * - Bridgy Fed self-comment spam filter (bsky.app author + brid.gy/post/bluesky/{own-DID} source)
+ * - Capture p-swarm-coins from OwnYourSwarm coin Webmention microformats into comment meta
  */
 
 defined( 'ABSPATH' ) || exit;
+
+/**
+ * Capture p-swarm-coins from OwnYourSwarm coin Webmention microformats.
+ *
+ * The Webmention plugin's MF2 handler discards vendor-prefixed properties
+ * (p-swarm-coins). Hook into its filter to extract the value from the raw
+ * parsed data and persist it as comment meta, so that
+ * possee_absorb_swarm_coin_webmention can read it on wp_insert_comment.
+ */
+add_filter( 'webmention_handler_mf2_set_properties', 'possee_capture_swarm_coins_meta', 10, 2 );
+function possee_capture_swarm_coins_meta( $meta, $handler ) {
+	$item = $handler->get_webmention_item();
+	if ( ! $item ) {
+		return $meta;
+	}
+	$raw = $item->get_raw();
+	if ( ! empty( $raw['properties']['swarm-coins'][0] ) ) {
+		$meta['p-swarm-coins'] = $raw['properties']['swarm-coins'][0];
+	}
+	return $meta;
+}
 
 /**
  * Convert OwnYourSwarm coin Webmentions into post meta instead of comments.

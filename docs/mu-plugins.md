@@ -77,6 +77,10 @@ Comment & webmention handling.
 - `get_comment_text` (priority 13): appends ` (via Mastodon)` or ` (via Bluesky)`
 - `webmention_comment_data` (priority 22): marks Bridgy Fed self-comments as spam
 
+**OwnYourSwarm coins**
+- `possee_capture_swarm_coins_meta` on `webmention_handler_mf2_set_properties`: captures `p-swarm-coins` from MF2 parsed coin Webmentions into comment meta (Webmention plugin discards vendor-prefixed properties by default)
+- `possee_absorb_swarm_coin_webmention` on `wp_insert_comment` (priority 10): absorbs Swarm coin Webmentions into `swarm_score_items` / `swarm_score_total` post meta, deletes the comment — coins never appear in comment threads
+
 ## `loopback-fix.php`
 
 WordPress loopback HTTPS fails inside Docker — `wp_safe_remote_get()` resolves public domain to nginx container private IP.

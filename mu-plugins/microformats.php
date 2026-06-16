@@ -174,12 +174,54 @@ add_filter('pre_insert_micropub_post', 'possee_log_micropub_payload', 1);
 function possee_log_micropub_payload($params)
 {
     $log_file = WP_CONTENT_DIR . '/micropub-log.json';
-    $entry    = array(
-        'time'   => gmdate('c'),
-        'params' => $params,
-    );
-    file_put_contents($log_file, json_encode($entry, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n---\n", FILE_APPEND | LOCK_EX);
+    file_put_contents($log_file, json_encode($params) . "\n", FILE_APPEND);
     return $params;
+}
+
+/**
+ * Extract Gutenberg image blocks into mf2_photo metadata for Micropub posts.
+ *
+ * When the Micropub plugin creates a post with Gutenberg image blocks in the
+ * post_content, extract them into mf2_photo array format so they can be:
+ * 1. Rendered via possee_render_micropub_photos
+ * 2. Syndicated to social networks (Bluesky, Mastodon)
+ *
+ * Hook at priority 2 (after logging at 1) to process before post insertion.
+ */
+add_filter('pre_insert_micropub_post', 'possee_extract_micropub_gutenberg_photos', 2);
+function possee_extract_micropub_gutenberg_photos($args)
+{
+    if (empty($args['post_content'])) {
+        return $args;
+    }
+
+    // Parse Gutenberg <!-- wp:image --> blocks for image IDs
+    $photos = array();
+    if (preg_match_all('/<!-- wp:image \{([^}]*?"id":(\d+),[^}]*)\} -->/', $args['post_content'], $matches)) {
+        foreach ($matches[2] as $attachment_id) {
+            $src = wp_get_attachment_image_src($attachment_id, 'full');
+            if ($src && ! empty($src[0])) {
+                $alt = get_post_meta($attachment_id, '_wp_attachment_image_alt', true);
+                $photos[] = array(
+                    'value' => $src[0],
+                    'alt'   => $alt ? $alt : '',
+                );
+            }
+        }
+    }
+
+    // Store extracted photos in meta_input for the post_insert
+    if (! empty($photos)) {
+        if (! isset($args['meta_input'])) {
+            $args['meta_input'] = array();
+        }
+        // Only set if not already in the Micropub payload
+        if (empty($args['meta_input']['mf2_photo'])) {
+            $args['meta_input']['mf2_photo'] = $photos;
+        }
+    }
+
+    return $args;
 }
 
 add_action('wp_head', 'possee_wp_head_microformats');
@@ -375,6 +417,54 @@ add_action('plugins_loaded', function () {
         register_syndication_provider(new SynProvider_Webmention_Bridgy_Bluesky());
     }
 }, 20);
+
+/**
+ * Extract Gutenberg image blocks into mf2_photo post meta.
+ *
+ * When posts are edited in wp-admin and Gutenberg image blocks are added/modified,
+ * extract them into mf2_photo meta so they can be:
+ * 1. Rendered via possee_render_micropub_photos
+ * 2. Re-syndicated to social networks (if block extraction didn't already happen)
+ *
+ * Hook at priority 10, before syndication (20), so photos are available for re-syndication.
+ */
+add_action('save_post', 'possee_extract_gutenberg_photos', 10, 2);
+function possee_extract_gutenberg_photos($post_id, $post)
+{
+    // Only process published posts with content
+    if (! in_array($post->post_status, array( 'publish', 'future' ), true)) {
+        return;
+    }
+    if (empty($post->post_content)) {
+        return;
+    }
+
+    // Check if post already has mf2_photo meta from Micropub payload
+    $existing_photos = get_post_meta($post_id, 'mf2_photo', true);
+    if (! empty($existing_photos) && is_array($existing_photos)) {
+        return; // Already has photos from Micropub, don't override
+    }
+
+    // Parse Gutenberg <!-- wp:image --> blocks for image IDs
+    $photos = array();
+    if (preg_match_all('/<!-- wp:image \{([^}]*?"id":(\d+),[^}]*)\} -->/', $post->post_content, $matches)) {
+        foreach ($matches[2] as $attachment_id) {
+            $src = wp_get_attachment_image_src($attachment_id, 'full');
+            if ($src && ! empty($src[0])) {
+                $alt = get_post_meta($attachment_id, '_wp_attachment_image_alt', true);
+                $photos[] = array(
+                    'value' => $src[0],
+                    'alt'   => $alt ? $alt : '',
+                );
+            }
+        }
+    }
+
+    // Store extracted photos in mf2_photo meta
+    if (! empty($photos)) {
+        update_post_meta($post_id, 'mf2_photo', $photos);
+    }
+}
 
 /**
  * Trigger syndication when custom post types (note, checkin, book) are saved

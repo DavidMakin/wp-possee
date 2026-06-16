@@ -30,6 +30,7 @@ Self-hosted WordPress with POSSE syndication to Mastodon and Bluesky, with backf
 - **Never skip clearing all three caches after PHP change** — OPcache, nginx fastcgi cache, WP-Optimize disk cache are independent.
 - **Never omit `--user 65532` from WP-CLI containers** — uploads dir owned by that UID; omitting silently breaks any file write.
 - **Never use `$post->post_excerpt` to check for native excerpt** — use `has_excerpt($post_id)`. Our `get_the_excerpt` filter can return non-empty strings even without native excerpt.
+- **Never edit n8n workflows directly on the production instance** — all changes go through git (`n8n-hardcover-workflow.json`) and deployed via n8n import. Direct edits cause drift and silent failures. See [`docs/incidents.md`](docs/incidents.md) for June 16 outage details.
 
 ## Blog post drafting
 

@@ -62,6 +62,7 @@ CSS for elements not configurable via Blocksy Customizer. See source for full de
 | Featured image lightbox | Click → overlay, vanilla JS |
 | `.likes` / `.reposts` facepile | `28px` round avatars, `-8px` overlap, +N overflow |
 | `.sloc-map-thumb` | Checkin map: 4/3 aspect, border, shadow |
+| Post type accent colors | 4px left strip on entry cards and single posts: `#5c7cfa` (post/article), `#94d82d` (note), `#f59f00` (book), `#e64980` (checkin) |
 
 **JS (via wp_footer)**: Heart SVG for likes facepile, image lightbox.
 

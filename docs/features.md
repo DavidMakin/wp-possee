@@ -16,6 +16,55 @@ In a flex column (`display: flex; flex-direction: column`), all children stretch
 
 Metadata lines like "Novella · 160 pages · 2018" use `::after` pseudo-elements on `<span>` children (except the last) with `content: "\00b7"`. The parent must be `display: flex; align-items: center;` and children use `:not(:last-child)::after` to avoid a trailing dot.
 
+## Swarm coins
+
+OwnYourSwarm sends a Webmention for each Swarm coin earned on a checkin. Coins are accumulated per-checkin and displayed in checkin headers and archives.
+
+### Data flow
+
+```
+Swarm checkin → OwnYourSwarm → Micropub POST (checkin post created)
+                             → sendCoins() queues webmentions
+                             → SendWebmentions::send() for each coin
+                             → WordPress webmention endpoint
+                             → Webmention plugin MF2 parser
+                             → possee_capture_swarm_coins_meta filter
+                               (extracts p-swarm-coins into comment meta)
+                             → possee_absorb_swarm_coin_webmention action
+                               (reads meta, stores in post meta, deletes comment)
+```
+
+### Post meta storage per checkin
+
+| Meta key | Type | Description |
+|---|---|---|
+| `swarm_score_total` | int | Sum of all coin points |
+| `swarm_score_items` | array | `[{points, icon, message}, ...]` |
+
+### Display
+
+- **Single checkin header** (`checkin-header.php`): renders coin icon + total after venue name
+- **Archive/excerpt** (`checkin-excerpt.php`): renders coin icon + total
+- **Styling**: `.checkin-coins`, `.checkin-coins-total`, `.checkin-coins-list` in `theme-styles.php` (amber `#c8a000`)
+
+### Backfilling coins for existing checkins
+
+New coin Webmentions are captured automatically after the fix (deployed 2026-06-16). For checkins imported before the fix, OwnYourSwarm's coin page hashes can be discovered via its permalink JSON endpoint, which is authenticated by OwnYourSwarm against Foursquare on the user's behalf:
+
+1. Get Swarm checkin ID from `mf2_syndication` meta
+2. GET `https://ownyourswarm.p3k.io/user/{foursquare_user_id}/checkin/{checkin_id}`
+3. JSON response includes `properties.comment` array with `/coin/{hash}` URLs
+4. Fetch each coin URL, extract `p-swarm-coins` (points), `u-photo` (icon), `p-name` (message)
+5. Store as `swarm_score_items` + `swarm_score_total` post meta
+
+Do NOT place the backfill script in `mu-plugins/` — WordPress auto-loads every PHP file there, causing it to run on every request.
+
+### Key files
+
+- **Capture**: `mu-plugins/comments.php` — `possee_capture_swarm_coins_meta`, `possee_absorb_swarm_coin_webmention`
+- **Display**: `mu-plugins/checkin-header.php`, `mu-plugins/checkin-excerpt.php`
+- **Styling**: `mu-plugins/theme-styles.php` (`.checkin-coins-*`)
+
 ## Header Post Counts widget
 
 "Post Counts" element in header (Blocksy header builder, middle-row, end column). Configured **entirely in Customizer UI** — no PHP filter for item list.

@@ -58,7 +58,7 @@ blockquote {
 .entry-card.type-post::before    { background-color: #5c7cfa; }
 .entry-card.type-note::before    { background-color: #94d82d; }
 .entry-card.type-book::before    { background-color: #f59f00; }
-.entry-card.type-checkin::before { background-color: #20c997; }
+.entry-card.type-checkin::before { background-color: #e64980; }
 
 /* ── CPT single pages: same left-accent strip as archive cards ── */
 .single article.type-post,
@@ -79,7 +79,7 @@ blockquote {
 .single article.type-post::before    { background-color: #5c7cfa; }
 .single article.type-note::before    { background-color: #94d82d; }
 .single article.type-book::before    { background-color: #f59f00; }
-.single article.type-checkin::before { background-color: #20c997; }
+.single article.type-checkin::before { background-color: #e64980; }
 
 .entry-card:hover {
 	transform: translate(0, -2px);

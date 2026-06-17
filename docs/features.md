@@ -65,6 +65,27 @@ Do NOT place the backfill script in `mu-plugins/` — WordPress auto-loads every
 - **Display**: `mu-plugins/checkin-header.php`, `mu-plugins/checkin-excerpt.php`
 - **Styling**: `mu-plugins/theme-styles.php` (`.checkin-coins-*`)
 
+## Image proxying via images.weserv.nl
+
+Book covers and Micropub photos are proxied through `images.weserv.nl` to reduce bandwidth:
+
+- **Book covers** (`mu-plugins/books.php`): `possee_book_proxy_cover_url()` rewrites `assets.hardcover.app` URLs through weserv at 160px (archive cards) or 280px (single post). Full-res URL preserved in `data-full-res` attribute.
+- **Micropub photos** (`mu-plugins/microformats.php`): `possee_image_proxy_url()` proxies Note images at 800px. Original URL in `data-full-res`.
+- **Lightbox overlay**: Both use the same click handler in `theme-styles.php` (`wp_footer`): reads `img.dataset.fullRes`, falls back to `img.dataset.coverFallback`, falls back to `img.src`. Opens a `<div id="blx-overlay">` fullscreen modal.
+
+Hardcover stores full-resolution originals (up to 1556×2475px, 553KB) with no URL-based resizing. Open Library offers S/M/L sizes natively — only Hardcover URLs are proxied.
+
+## WP 6.9 lightbox: `add_theme_support('lightbox')` no longer works
+
+WP 6.9 deprecated `add_theme_support('lightbox')` in favour of `theme.json` settings (`settings.lightbox.enabled`). Blocksy lacks this declaration, so the "Expand on click" toggle is hidden in the Image block.
+
+**Fix** (`mu-plugins/theme-styles.php`): Two filters enable it:
+
+1. `wp_theme_json_data_theme` — injects `settings.lightbox: { enabled: true, allowEditing: true }` into the theme.json data for frontend rendering.
+2. `block_editor_settings_all` — passes the same object to the editor store, making the toggle visible in the block UI.
+
+**Where to find the toggle**: In WP 6.9, "Expand on click" is NOT in the Settings sidebar. It's in the **toolbar Link popover** — select an Image block, click the Link button (chain icon), and choose "Enlarge on click". The option was moved from sidebar to toolbar UI in WP 6.9.
+
 ## Header Post Counts widget
 
 "Post Counts" element in header (Blocksy header builder, middle-row, end column). Configured **entirely in Customizer UI** — no PHP filter for item list.

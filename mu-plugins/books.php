@@ -148,6 +148,18 @@ function possee_book_cover_url($isbn, $size = 'M')
     return 'https://covers.openlibrary.org/b/isbn/' . rawurlencode($isbn) . '-' . $size . '.jpg?default=false';
 }
 
+function possee_book_proxy_cover_url($url, $w = 160)
+{
+    if (! $url) {
+        return '';
+    }
+    // Only proxy Hardcover CDN images — Open Library has its own sizing.
+    if (! str_contains($url, 'assets.hardcover.app')) {
+        return $url;
+    }
+    return 'https://images.weserv.nl/?url=' . rawurlencode($url) . '&w=' . (int) $w;
+}
+
 function possee_book_cover_placeholder_url()
 {
     return 'data:image/svg+xml,' . rawurlencode(
@@ -162,7 +174,7 @@ function possee_book_cover_placeholder_url()
     );
 }
 
-function possee_book_cover_img_html($isbn, $alt, $size = 'M', $extra_class = '', $fallback_url = '', $use_direct_src = false)
+function possee_book_cover_img_html($isbn, $alt, $size = 'M', $extra_class = '', $fallback_url = '', $use_direct_src = false, $full_res_url = '')
 {
     $placeholder = possee_book_cover_placeholder_url();
     $class       = trim('book-cover-img ' . $extra_class);
@@ -195,6 +207,9 @@ function possee_book_cover_img_html($isbn, $alt, $size = 'M', $extra_class = '',
         }
         if ($fallback_url) {
             $attrs .= sprintf(' data-cover-fallback="%s"', esc_url($fallback_url));
+        }
+        if ($full_res_url) {
+            $attrs .= sprintf(' data-full-res="%s"', esc_url($full_res_url));
         }
         return "<img $attrs/>";
     }
@@ -364,9 +379,10 @@ function possee_book_series_html($data)
 
 function possee_book_card_html($post_id, $data, $context = 'single')
 {
-    $size      = $context === 'single' ? 'L' : 'M';
-    $hc_fallback = $data['hc_cover_url'] ?: ( $data['hc_cover'] ?? '' );
-    $cover_img = possee_book_cover_img_html($data['isbn'], 'Cover of ' . $data['title'], $size, '', $hc_fallback);
+    $size         = $context === 'single' ? 'L' : 'M';
+    $hc_raw       = $data['hc_cover_url'] ?: ( $data['hc_cover'] ?? '' );
+    $hc_fallback  = possee_book_proxy_cover_url($hc_raw, $size === 'L' ? 280 : 160);
+    $cover_img    = possee_book_cover_img_html($data['isbn'], 'Cover of ' . $data['title'], $size, '', $hc_fallback, false, $hc_raw);
     $stars     = possee_book_stars_html($data['rating']);
     $isbn_attr = $data['uid'] ? ' data-isbn="' . esc_attr($data['uid']) . '"' : '';
 
@@ -528,7 +544,7 @@ function possee_book_card_layer($outputs, $prefix, $featured_image_args)
         return $outputs;
     }
 
-    $hc_fallback = $data['hc_cover_url'] ?: ( $data['hc_cover'] ?? '' );
+    $hc_fallback = possee_book_proxy_cover_url($data['hc_cover_url'] ?: ( $data['hc_cover'] ?? '' ), 160);
     // Archive/search: use direct src so covers show immediately without JS swap.
     $cover_img = possee_book_cover_img_html($data['isbn'], '', 'M', '', $hc_fallback, true);
     $stars     = possee_book_stars_html($data['rating']);

@@ -1,4 +1,32 @@
 <?php
+// Enable the Image block "Expand on click" (lightbox) in WP 6.9+.
+// Blocksy's theme.json doesn't declare settings.lightbox, so inject via filter.
+// Two paths: theme_json for frontend rendering, block_editor_settings for editor UI toggle.
+add_filter('wp_theme_json_data_theme', function ($theme_json) {
+    $data = $theme_json->get_data();
+    if (! isset($data['settings']['lightbox'])) {
+        $data['settings']['lightbox'] = array(
+            'enabled'      => true,
+            'allowEditing' => true,
+        );
+    }
+    $theme_json->update_with($data);
+    return $theme_json;
+});
+
+// Ensure lightbox setting reaches the block editor's useSettings('lightbox') hook.
+// __experimentalFeatures is set from wp_get_global_settings() which includes lightbox,
+// but the store may not merge it to root level for all keys. Pass explicitly.
+add_filter('block_editor_settings_all', function ($settings) {
+    if (! isset($settings['lightbox'])) {
+        $settings['lightbox'] = array(
+            'enabled'      => true,
+            'allowEditing' => true,
+        );
+    }
+    return $settings;
+});
+
 add_action('wp_head', function () {
     ?>
 <style>
@@ -154,7 +182,8 @@ table thead th:first-child {
 
 /* Featured image lightbox */
 .single .ct-featured-image .ct-media-container,
-.is-book-post .book-card--single .book-cover-img {
+.is-book-post .book-card--single .book-cover-img,
+.micropub-photo .u-photo {
     cursor: zoom-in;
 }
 
@@ -1193,7 +1222,20 @@ add_action('wp_footer', function () {
         img.addEventListener('click', function () {
             if (!img.src || img.src === window.location.href) return;
             triggerEl = img;
-            overlayImg.src = img.dataset.coverFallback || img.src;
+            overlayImg.src = img.dataset.fullRes || img.dataset.coverFallback || img.src;
+            overlayImg.alt = img.alt;
+            overlay.classList.add('blx-open');
+            document.body.style.overflow = 'hidden';
+            setTimeout(function () { overlay.focus(); }, 50);
+        });
+    });
+
+    // Open on click of Micropub photos (Note images)
+    document.querySelectorAll('.micropub-photo .u-photo').forEach(function (img) {
+        img.addEventListener('click', function () {
+            if (!img.src) return;
+            triggerEl = img;
+            overlayImg.src = img.dataset.fullRes || img.src;
             overlayImg.alt = img.alt;
             overlay.classList.add('blx-open');
             document.body.style.overflow = 'hidden';

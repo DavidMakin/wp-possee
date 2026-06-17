@@ -1014,6 +1014,14 @@ function possee_quill_footer($content)
  * mf2_photo is stored as a serialised array of items, each either a plain URL
  * string or an array with 'value' (URL) and optional 'alt' keys.
  */
+function possee_image_proxy_url($url, $w = 800)
+{
+    if (! $url) {
+        return '';
+    }
+    return 'https://images.weserv.nl/?url=' . rawurlencode($url) . '&w=' . (int) $w;
+}
+
 add_filter('the_content', 'possee_render_micropub_photos', 21);
 function possee_render_micropub_photos($content)
 {
@@ -1029,16 +1037,17 @@ function possee_render_micropub_photos($content)
     $html = '';
     foreach ($photos as $photo) {
         if (is_string($photo) && $photo) {
-            $url = esc_url($photo);
-            $alt = '';
+            $full = $photo;
+            $alt  = '';
         } elseif (is_array($photo) && ! empty($photo['value'])) {
-            $url = esc_url($photo['value']);
-            $alt = isset($photo['alt']) ? esc_attr($photo['alt']) : '';
+            $full = $photo['value'];
+            $alt  = isset($photo['alt']) ? esc_attr($photo['alt']) : '';
         } else {
             continue;
         }
+        $display = possee_image_proxy_url($full, 800);
         $html .= '<figure class="micropub-photo">'
-            . '<img class="u-photo" src="' . $url . '" alt="' . $alt . '" loading="lazy">'
+            . '<img class="u-photo" src="' . esc_url($display) . '" alt="' . $alt . '" loading="lazy" data-full-res="' . esc_url($full) . '">'
             . '</figure>';
     }
 

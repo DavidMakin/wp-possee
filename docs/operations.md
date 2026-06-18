@@ -15,7 +15,25 @@ Remote shell is **fish** — use `ssh homeip bash << 'EOF' ... EOF` for multi-li
 
 ## Critical: WP-CLI invocation
 
-WordPress container has no shell. Run WP-CLI in throwaway container:
+WordPress container has no shell. Two methods:
+
+### Method A: docker compose (simpler)
+
+The compose file has a `wpcli` service under `profiles: [tools]`. Run from server:
+
+```bash
+ssh homeip bash << 'EOF'
+source /storage/Docker/wp-possee/.env
+cd /storage/Docker/wp-possee
+docker compose run --rm wpcli wp <command>
+EOF
+```
+
+This handles volumes, env vars (`MYSQL_PASSWORD` etc.), networks (both `wp-possee` and `db`), and user (65532) automatically. Prefer this for most operations.
+
+**Note**: `docker compose run --rm` recreates the container each time (restarts the wordpress service too via docker-compose's lifecycle). This is fine — the transient container exits after the command runs.
+
+### Method B: standalone docker run (legacy)
 
 ```bash
 docker run --rm \
@@ -37,6 +55,14 @@ docker run --rm \
 ### WP-CLI quoting over SSH
 
 **Never** embed multi-line PHP in `ssh homeip "bash -c '...'"`. Quoting breaks silently. Always: write PHP to local file → `scp` to server → `wp eval-file /tmp/file.php`. No exceptions beyond single short expressions.
+
+### Docker compose note
+
+`docker compose run --rm wpcli` may trigger a container recreate of wordpress (since wpcli `depends_on: wordpress`). This is harmless — the wordpress container restarts and the wpcli command executes against the restarted instance. If you see output like `Container wp-possee-wordpress-1 Recreated`, this is expected.
+
+### PHP image version note
+
+The compose wpcli service uses `wordpress:cli-php8.5`. The standalone docker run example above uses `wordpress:cli-php8.3`. Either works; prefer the compose version for consistency.
 
 ## Cache layers (3 independent caches)
 

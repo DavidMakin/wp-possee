@@ -7,8 +7,8 @@ Self-hosted WordPress with POSSE syndication to Mastodon and Bluesky, with backf
 - **Stack**: WordPress (PHP-FPM) + Nginx + Cloudflare Tunnel + MariaDB
 - **Theme**: Blocksy + Blocksy Companion (font/color via Customizer GUI — do not override in mu-plugin)
 - **mu-plugins**: `microformats.php`, `comments.php`, `theme-styles.php`, `loopback-fix.php`, `books.php`, `post-types.php`, `homepage-highlights.php`, `header-post-counts.php`, `mermaid.php`, `pretty-archives.php`
-- **Deploy**: `scp mu-plugins/foo.php homeip:...` → restart wordpress + nginx → purge WP-Optimize cache
-- **WP-CLI**: `docker run --rm --user 65532 ... wordpress:cli-php8.3 wp --allow-root <cmd>`
+- **Deploy**: `scp mu-plugins/foo.php homeip:/storage/Docker/wp-possee/mu-plugins/` → restart wordpress + nginx → purge nginx fastcgi cache
+- **WP-CLI**: Prefer `docker compose run --rm wpcli wp <cmd>` (handles user/volumes/env/networks). Fallback: `docker run --rm --user 65532 -v wp-possee_wp_data:/var/www/html -v /storage/Docker/wp-possee/mu-plugins:/var/www/html/wp-content/mu-plugins --network db -e WORDPRESS_DB_HOST=mariadb -e WORDPRESS_DB_USER=wordpress -e WORDPRESS_DB_PASSWORD="${MYSQL_PASSWORD}" -e WORDPRESS_DB_NAME=wordpress wordpress:cli-php8.3 wp --allow-root`
 - **Backups**: `ssh homeip docker exec mariadb mysqldump ... | gzip > backup.sql.gz`
 - **Remote shell is fish** — use `ssh homeip bash << 'EOF' ... EOF` for multi-line commands
 
@@ -27,8 +27,7 @@ Self-hosted WordPress with POSSE syndication to Mastodon and Bluesky, with backf
 - **Never set `font-family` in mu-plugin CSS** — Blocksy Customizer owns typography. Exception: `monospace` for code elements.
 - **Never run multi-line commands over `ssh homeip` without `bash << 'EOF' ... EOF`** — remote shell is fish.
 - **Never edit mu-plugin files directly on server** — edit locally, `scp`, restart. Direct edits overwritten on next deploy.
-- **Never skip clearing all three caches after PHP change** — OPcache, nginx fastcgi cache, WP-Optimize disk cache are independent.
-- **Never omit `--user 65532` from WP-CLI containers** — uploads dir owned by that UID; omitting silently breaks any file write.
+- **Never skip clearing all caches after PHP change** — OPcache (auto on mtime), nginx fastcgi cache (container recreate), and Cloudflare CDN (manual purge) are independent layers.
 - **Never use `$post->post_excerpt` to check for native excerpt** — use `has_excerpt($post_id)`. Our `get_the_excerpt` filter can return non-empty strings even without native excerpt.
 - **Never edit n8n workflows directly on the production instance** — all changes go through git (`n8n-hardcover-workflow.json`) and deployed via n8n import. Direct edits cause drift and silent failures. See [`docs/incidents.md`](docs/incidents.md) for June 16 outage details.
 

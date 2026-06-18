@@ -1349,8 +1349,22 @@ function possee_micropub_book_deduplicate($args)
     ));
 
     if (! empty($existing)) {
-        // Short-circuit — book already exists.
-        $args['ID'] = $existing[0];
+        $post_id = $existing[0];
+
+        // Persist meta changes to the existing post.
+        //
+        // The Micropub plugin's handle_create() → store_mf2() puts all mf2
+        // properties into $args['meta_input'] but then insert_post()
+        // short-circuits when it sees ID is set, never calling wp_insert_post.
+        // So meta accumulated in $args['meta_input'] is silently dropped.
+        //
+        // Workaround: persist meta directly here, then set ID only to prevent
+        // the plugin from creating a duplicate post.
+        if (isset($args['meta_input']) && is_array($args['meta_input'])) {
+            foreach ($args['meta_input'] as $meta_key => $meta_value) {
+                update_post_meta($post_id, $meta_key, $meta_value);
+            }
+        }
 
         // When transitioning to "finished", update post_date to match.
         $new_status = $args['meta_input']['mf2_read-status'] ?? null;
@@ -1358,10 +1372,16 @@ function possee_micropub_book_deduplicate($args)
             $finished_at = $args['meta_input']['mf2_finished-at'] ?? null;
             if ($finished_at) {
                 $date = date('Y-m-d H:i:s', strtotime($finished_at));
-                $args['post_date']     = $date;
-                $args['post_date_gmt'] = get_gmt_from_date($date);
+                wp_update_post(array(
+                    'ID'            => $post_id,
+                    'post_date'     => $date,
+                    'post_date_gmt' => get_gmt_from_date($date),
+                ));
             }
         }
+
+        // Short-circuit — prevent Micropub plugin from creating a new post.
+        $args['ID'] = $post_id;
     } else {
         // Store ISBN as accessible meta for future dedup queries.
         if (! isset($args['meta_input'])) {

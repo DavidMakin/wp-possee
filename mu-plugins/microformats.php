@@ -1033,13 +1033,83 @@ function possee_quill_footer($content)
 }
 
 /**
- * Render mf2_photo entries as <figure class="u-photo"> elements appended after
- * e-content.  Micropub\Render::render_content is suppressed site-wide (see
- * possee_remove_micropub_render) to prevent duplicate e-content wrappers, so
- * we replicate its photo rendering here.
+ * Sideload mf2_photo URLs into the WordPress Media Library after Micropub
+ * post creation.  Stores URL → attachment_id mapping so the render function
+ * can serve medium-sized images with a lightbox link to full size.
  *
- * mf2_photo is stored as a serialised array of items, each either a plain URL
- * string or an array with 'value' (URL) and optional 'alt' keys.
+ * Runs at priority 20 to fire after the Micropub plugin has saved mf2_photo
+ * meta (priority 10).  Skips if the post already has attachments stored.
+ */
+add_action('after_micropub', 'possee_sideload_micropub_photos', 20, 2);
+function possee_sideload_micropub_photos($input, $args)
+{
+    if (! isset($args['ID'])) {
+        return;
+    }
+    $post_id = $args['ID'];
+    $photos  = get_post_meta($post_id, 'mf2_photo', true);
+    if (empty($photos) || ! is_array($photos)) {
+        return;
+    }
+
+    // Don't reprocess if we already have attachment mappings.
+    if (get_post_meta($post_id, 'possee_photo_attachments', true)) {
+        return;
+    }
+
+    require_once ABSPATH . 'wp-admin/includes/media.php';
+    require_once ABSPATH . 'wp-admin/includes/file.php';
+    require_once ABSPATH . 'wp-admin/includes/image.php';
+
+    $mapping = array();
+    foreach ($photos as $photo) {
+        $url = '';
+        if (is_string($photo) && $photo) {
+            $url = $photo;
+        } elseif (is_array($photo) && ! empty($photo['value'])) {
+            $url = $photo['value'];
+        }
+        if (! $url) {
+            continue;
+        }
+
+        // Skip URLs already hosted on this site (Quill uploads directly to Media Library).
+        $home = wp_parse_url(home_url(), PHP_URL_HOST);
+        $host = wp_parse_url($url, PHP_URL_HOST);
+        if ($home && $host && strtolower($host) === strtolower($home)) {
+            $existing_id = attachment_url_to_postid($url);
+            if ($existing_id) {
+                $mapping[$url] = $existing_id;
+            }
+            continue;
+        }
+
+        $tmp = download_url($url);
+        if (is_wp_error($tmp)) {
+            continue;
+        }
+
+        $file_array = array(
+            'name'     => basename($url),
+            'tmp_name' => $tmp,
+        );
+
+        $attachment_id = media_handle_sideload($file_array, $post_id);
+        if (is_wp_error($attachment_id)) {
+            @unlink($tmp);
+            continue;
+        }
+
+        $mapping[$url] = (int) $attachment_id;
+    }
+
+    if ($mapping) {
+        update_post_meta($post_id, 'possee_photo_attachments', $mapping);
+    }
+}
+
+/**
+ * Proxy an image URL through images.weserv.nl for bandwidth-friendly display.
  */
 function possee_image_proxy_url($url, $w = 800)
 {
@@ -1061,21 +1131,46 @@ function possee_render_micropub_photos($content)
         return $content;
     }
 
+    $attachments = get_post_meta($post_id, 'possee_photo_attachments', true);
+    if (! is_array($attachments)) {
+        $attachments = array();
+    }
+
     $html = '';
     foreach ($photos as $photo) {
+        $full = '';
+        $alt  = '';
         if (is_string($photo) && $photo) {
             $full = $photo;
-            $alt  = '';
         } elseif (is_array($photo) && ! empty($photo['value'])) {
             $full = $photo['value'];
             $alt  = isset($photo['alt']) ? esc_attr($photo['alt']) : '';
-        } else {
+        }
+        if (! $full) {
             continue;
         }
-        $display = possee_image_proxy_url($full, 800);
-        $html .= '<figure class="micropub-photo">'
-            . '<img class="u-photo" src="' . esc_url($display) . '" alt="' . $alt . '" loading="lazy" data-full-res="' . esc_url($full) . '">'
-            . '</figure>';
+
+        if (isset($attachments[$full])) {
+            // Use WordPress-resized medium image with lightbox to full.
+            $html .= '<figure class="micropub-photo">';
+            $html .= wp_get_attachment_image(
+                $attachments[$full],
+                'medium',
+                false,
+                array(
+                    'class'           => 'u-photo',
+                    'loading'         => 'lazy',
+                    'data-full-res'   => esc_url(wp_get_attachment_image_url($attachments[$full], 'full')),
+                )
+            );
+            $html .= '</figure>';
+        } else {
+            // Fallback: proxy via weserv.nl, full-res in data attribute.
+            $display = possee_image_proxy_url($full, 800);
+            $html .= '<figure class="micropub-photo">'
+                . '<img class="u-photo" src="' . esc_url($display) . '" alt="' . esc_attr($alt) . '" loading="lazy" data-full-res="' . esc_url($full) . '">'
+                . '</figure>';
+        }
     }
 
     return $content . $html;

@@ -124,10 +124,35 @@ This applies to n8n HTTP request nodes targeting the WordPress Micropub endpoint
 
 The loopback-fix mu-plugin (`mu-plugins/loopback-fix.php`) does the same rewrite for WordPress-internal HTTP calls.
 
+## WordPress MCP Server
+
+Plugin: `mcp` (mcp-wp/mcp-server), installed from the nightly build ZIP (not the GitHub source archive, which ships without `vendor/`):
+
+```bash
+docker compose run --rm wpcli wp plugin install --activate https://mcp-wp.github.io/mcp-server/mcp.zip
+```
+
+**Endpoint:** `https://blog.sleep-er.co.uk/wp-json/mcp/v1/mcp`  
+**Auth:** HTTP Basic — user `adminman`, application password stored in `.opencode/opencode.jsonc`.  
+**Protocol:** MCP Streamable HTTP. Clients must send `initialize` first; the response `Mcp-Session-Id` header must be carried on subsequent requests.
+
+### Patched file: `RestApi.php`
+
+The nightly build throws `Invalid type: float` on `initialize` because `sanitize_type()` has no mapping for `float`. A patched copy lives at `patches/mcp-RestApi.php` (added `'float' => 'number'` to the mapping). The patch lives only in the Docker volume and will be overwritten on plugin update. Reapply after any update:
+
+```bash
+ssh homeip docker cp /storage/Docker/wp-possee/patches/mcp-RestApi.php \
+  wp-possee-wordpress-1:/var/www/html/wp-content/plugins/mcp/src/MCP/Servers/WordPress/Tools/RestApi.php
+ssh homeip docker compose -f /storage/Docker/wp-possee/docker-compose.yml restart wordpress
+```
+
+*(The patch file on the server is at `/storage/Docker/wp-possee/patches/mcp-RestApi.php` — copy it there after a `git pull` if needed.)*
+
 ## Plugin notes
 
 | Plugin | Note |
 |---|---|
+| `mcp` | MCP server — nightly build only; `patches/mcp-RestApi.php` must be reapplied after updates (see above) |
 | `activitypub` | Installed but inactive — activate after configuring actor URL |
 | `syndication-links` | `get_syndication_links($post_id, $args)` returns HTML or empty string |
 | `simple-location` | Hooks `the_content` at priority 11 (map) and 12 (location text); `Loc_Config::map_provider()` renders static maps |

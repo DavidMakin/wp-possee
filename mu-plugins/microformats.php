@@ -395,6 +395,11 @@ add_action('plugins_loaded', function () {
             if (! is_singular()) {
                 return;
             }
+            // Notes have dedicated p-bridgy-*-content from possee_note_bridgy_content()
+            // that includes the permalink. Skip here to avoid duplicate output.
+            if (is_singular('note')) {
+                return;
+            }
             if (( 1 === (int) get_option('syndication_use_excerpt') ) && has_excerpt()) {
                 $text = get_the_excerpt();
             } else {
@@ -528,12 +533,34 @@ function possee_syndication_link_checked($checked, $uid, $post_id)
  * Give Bridgy explicit content with the permalink so Mastodon
  * and Bluesky posts include a "blog.sleep-er.co.uk" link.
  */
-add_action('wp_footer', 'possee_note_bridgy_content');
+add_action('wp_footer', 'possee_note_bridgy_content', 0);
 function possee_note_bridgy_content()
 {
     if (! is_singular('note')) {
         return;
     }
+
+    global $wp_filter;
+    if (! empty($wp_filter['wp_footer']) && isset($wp_filter['wp_footer']->callbacks)) {
+        foreach ($wp_filter['wp_footer']->callbacks as $priority => $callbacks) {
+            foreach ($callbacks as $callback) {
+                $function = $callback['function'] ?? null;
+                if (! is_array($function) || ! is_object($function[0] ?? null)) {
+                    continue;
+                }
+
+                if (
+                    'wp_footer' !== ($function[1] ?? null)
+                    || ! ($function[0] instanceof SynProvider_Webmention_Bridgy)
+                ) {
+                    continue;
+                }
+
+                remove_action('wp_footer', $function, $priority);
+            }
+        }
+    }
+
     $post        = get_queried_object();
     $permalink   = esc_url(get_permalink($post));
     $content_raw = get_post_field('post_content', $post);

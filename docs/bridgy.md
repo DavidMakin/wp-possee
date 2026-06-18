@@ -100,6 +100,21 @@ Then update `mf2_syndication` post meta to replace `https://brid.gy/publish/blue
 
 **One-off recovery** (for posts published before the fix): `wp post list --post_type=note --field=ID | xargs -I {} sh -c 'test -n "$(wp post meta get {} _syndicate-to 2>/dev/null)" && wp post update {} --edit'` — re-save each note with syndication targets, triggering the new handler.
 
+## Notes syndicated without a link back
+
+**Root cause**: note pages inject explicit `p-bridgy-mastodon-content` and `p-bridgy-bluesky-content` with the permalink, but Bridgy provider footer callbacks can also emit a second hidden Bluesky paragraph without the link. Bridgy may pick the wrong hidden text when both are present.
+
+**Permanent fix**: `possee_note_bridgy_content` in `microformats.php` now runs at `wp_footer` priority `0` and removes any footer callback whose object is a `SynProvider_Webmention_Bridgy` before outputting the note-specific hidden paragraphs. `SynProvider_Webmention_Bridgy_Bluesky::wp_footer()` also skips `note` singles.
+
+**Diagnosis**: view source for the note page with a cache-busting query param (for example `?v=2`) and confirm only these hidden paragraphs remain:
+
+```html
+<p class="p-bridgy-mastodon-content" style="display:none">… https://blog.sleep-er.co.uk/notes/.../</p>
+<p class="p-bridgy-bluesky-content" style="display:none">… https://blog.sleep-er.co.uk/notes/.../</p>
+```
+
+If a third `p-bridgy-bluesky-content` still appears, purge WP-Optimize disk cache first. Cloudflare may also serve stale HTML unless you use a cache-busting query param or purge it manually.
+
 ## Delayed cron handler
 
 `possee_bridgy_delayed_handler` sequence (fires 90s after Micropub post):

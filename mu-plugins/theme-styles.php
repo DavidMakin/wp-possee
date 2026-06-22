@@ -382,6 +382,17 @@ table thead th:first-child {
     display: inline;
 }
 
+/* ── Note archive card: location + weather ────────────────────── */
+/* Added by possee_note_location_weather (microformats.php) after suppressing
+   Simple Location's the_content injection on non-singular pages. The text
+   appears on its own line, visually subordinate to the note body. */
+.entry-card .note-location-weather {
+    font-size: 0.85em;
+    color: #888;
+    margin-top: 0.5em;
+    line-height: 1.4;
+}
+
 /* ── Checkin card: map thumbnail (no featured image) ──────────── */
 .entry-card .sloc-map-thumb {
     display: block;

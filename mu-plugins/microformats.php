@@ -860,6 +860,80 @@ function possee_remove_sloc_content_on_checkin()
     remove_filter('the_content', array( 'Micropub\Render', 'render_content' ), 1);
 }
 
+/**
+ * Strip Simple Location's sloc-display output from content on non-singular
+ * pages (archives, feeds) so location/weather text doesn't pollute excerpts.
+ *
+ * Runs at priority 13 — after Geo_Data::location_content (priority 12) has
+ * appended the sloc-display div. Stripping here is more reliable than trying
+ * to remove the filter early (wp action timing issues).
+ */
+add_filter('the_content', 'possee_strip_sloc_from_archive', 13);
+function possee_strip_sloc_from_archive($content)
+{
+    if (is_singular() || is_feed()) {
+        return $content;
+    }
+
+    // Strip Simple Location's sloc-display div and everything inside it.
+    $content = preg_replace('~<div[^>]*class="[^"]*sloc-display[^"]*"[^>]*>.*?</div>\s*~si', '', $content);
+
+    return $content;
+}
+
+/**
+ * Render location and weather on note archive cards as a separate styled line.
+ *
+ * Geo_Data::location_content's sloc-display is stripped from the_content on
+ * non-singular pages by possee_strip_sloc_from_archive (priority 13). This
+ * filter reads the raw geo_address and weather meta directly and renders it
+ * with a dedicated class for reduced visual weight.
+ */
+add_filter('blocksy:archive:render-card-layers', 'possee_note_location_weather', 12, 3);
+function possee_note_location_weather($outputs, $prefix, $featured_image_args)
+{
+    if (get_post_type() !== 'note' || is_feed()) {
+        return $outputs;
+    }
+    // Checkin posts have their own excerpt format with location/weather built in.
+    if (has_tag('checkin')) {
+        return $outputs;
+    }
+
+    $post_id = get_the_ID();
+    $parts   = array();
+
+    // Location from Simple Location's geo_address meta.
+    $address = get_post_meta($post_id, 'geo_address', true);
+    if ($address) {
+        $parts[] = esc_html($address);
+    }
+
+    // Weather from Simple Location post meta.
+    $temp    = get_post_meta($post_id, 'weather_temperature', true);
+    $summary = get_post_meta($post_id, 'weather_summary', true);
+    if ($temp !== '') {
+        $parts[] = round((float) $temp) . '°C';
+    }
+    if ($summary) {
+        $parts[] = esc_html($summary);
+    }
+
+    if (empty($parts)) {
+        return $outputs;
+    }
+
+    $html = '<div class="note-location-weather">' . implode(' ', $parts) . '</div>';
+
+    if (isset($outputs['excerpt'])) {
+        $outputs['excerpt'] .= $html;
+    } else {
+        $outputs['excerpt'] = $html;
+    }
+
+    return $outputs;
+}
+
 // Micropub's render_content wraps content in <div class="e-content"> — we do that
 // ourselves in possee_wrap_econtent, so suppress it on all singular posts.
 add_action('wp', 'possee_remove_micropub_render');

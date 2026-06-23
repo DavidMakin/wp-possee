@@ -427,8 +427,7 @@ table thead th:first-child {
     --theme-headings-color: #e8ecf4;
     --theme-heading-color: #e8ecf4;
     color: #e8ecf4;
-    height: 280px;
-    overflow: hidden;
+    min-height: 280px;
 }
 
 .possee-highlights .entry-card .entry-title {

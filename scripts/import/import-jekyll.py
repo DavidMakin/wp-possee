@@ -9,7 +9,7 @@ import tempfile
 
 POSTS_DIR = "/home/david/workspace/DavidMakin.github.io/_posts"
 WP_CLI = ["docker", "compose", "run", "--rm", "wpcli"]
-COMPOSE_DIR = "/Storage/docker/wp-possee"
+COMPOSE_DIR = "/storage/Docker/wp-possee"
 
 
 def parse_front_matter(content):

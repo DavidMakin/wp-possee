@@ -6,7 +6,7 @@ import subprocess
 
 POSTS_DIR = "/home/david/workspace/DavidMakin.github.io/_posts"
 IMAGES_DIR = "/home/david/workspace/DavidMakin.github.io/assets/img"
-COMPOSE_DIR = "/Storage/docker/wp-possee"
+COMPOSE_DIR = "/storage/Docker/wp-possee"
 
 SLUG_TO_ID = {
     "simple-rest-with-silex-part1-of-3": "36",

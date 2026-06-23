@@ -1552,6 +1552,35 @@ function possee_title_pname($title, $id = null)
     return '<span class="p-name">' . $title . '</span>';
 }
 
+/**
+ * Add p-category microformat for each WordPress category so Bridgy
+ * converts them to hashtags on syndicated posts (Mastodon, Bluesky).
+ * Prepended at priority 0 so they land inside the h-entry scope
+ * before the e-content. Uses <data> elements that are invisible to users.
+ */
+add_filter('the_content', 'possee_category_pname', 0);
+function possee_category_pname($content)
+{
+    if (! is_singular() || ! in_the_loop()) {
+        return $content;
+    }
+    $categories = get_the_category();
+    if (empty($categories)) {
+        return $content;
+    }
+    $html = '';
+    foreach ($categories as $cat) {
+        if (in_array($cat->slug, array('uncategorized', 'uncategorised'), true)) {
+            continue;
+        }
+        $html .= '<data class="p-category" value="' . esc_attr($cat->name) . '"></data>';
+    }
+    if (! $html) {
+        return $content;
+    }
+    return $html . $content;
+}
+
 add_filter('the_content', 'possee_wrap_econtent', 20);
 function possee_wrap_econtent($content)
 {

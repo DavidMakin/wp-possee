@@ -50,6 +50,11 @@ function possee_highlights_slim_card($output, $component)
 
 function possee_highlights_fetch()
 {
+    $cached = get_transient('possee_homepage_highlights');
+    if (false !== $cached) {
+        return $cached;
+    }
+
     $posts = array();
 
     $checkins = get_posts(array(
@@ -104,5 +109,14 @@ function possee_highlights_fetch()
         $posts[] = $notes[0];
     }
 
+    set_transient('possee_homepage_highlights', $posts, 5 * MINUTE_IN_SECONDS);
     return $posts;
+}
+
+add_action('save_post', 'possee_invalidate_highlights_cache', 10, 2);
+function possee_invalidate_highlights_cache($post_id, $post)
+{
+    if (in_array($post->post_type, array( 'book', 'checkin', 'note' ), true)) {
+        delete_transient('possee_homepage_highlights');
+    }
 }

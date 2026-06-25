@@ -567,10 +567,10 @@ function possee_book_card_layer($outputs, $prefix, $featured_image_args)
         esc_html($data['title'])
     );
 
-    $tags_html = blocksy_post_meta(
+    $tags_html = function_exists('blocksy_post_meta') ? blocksy_post_meta(
         [ [ 'id' => 'categories', 'enabled' => true, 'taxonomy' => 'post_tag' ] ],
         [ 'meta_type' => 'simple', 'meta_divider' => 'slash', 'has_term_class' => true, 'attr' => [ 'data-id' => 'book' ] ]
-    );
+    ) : '';
 
     $status_html = $data['status'] ? sprintf(
         '<span class="book-status book-status--%s">%s%s</span>',
@@ -634,7 +634,7 @@ function possee_register_book_meta()
         'type'           => 'string',
         'single'         => true,
         'show_in_rest'   => true,
-        'auth_callback'  => '__return_true',
+        'auth_callback'  => 'is_user_logged_in',
     );
     register_meta('post', 'isbn', $args);
     register_meta('post', 'mf2_read-status', $args);
@@ -741,7 +741,7 @@ function possee_rest_book_update_status($request)
 add_action('rest_api_init', 'possee_search_cover_field', 20);
 function possee_search_cover_field()
 {
-    if (! isset($_GET['ct_live_search']) || 'true' !== $_GET['ct_live_search']) {
+    if (! isset($_GET['ct_live_search']) || 'true' !== sanitize_key($_GET['ct_live_search'])) {
         return;
     }
 
@@ -756,8 +756,10 @@ function possee_search_cover_field()
     register_rest_field('search-result', 'placeholder_image', array(
         'get_callback' => function ($post, $field_name, $request) {
             // Books: return the actual cover URL.
+            // mf2_* meta is stored as a serialised array by the Micropub plugin; unwrap it.
             if (isset($post['subtype']) && 'book' === $post['subtype']) {
-                $cover = get_post_meta($post['id'], 'mf2_book-cover-url', true);
+                $raw   = get_post_meta($post['id'], 'mf2_book-cover-url', true);
+                $cover = is_array($raw) ? ( $raw[0] ?? '' ) : $raw;
                 if ($cover) {
                     return $cover;
                 }

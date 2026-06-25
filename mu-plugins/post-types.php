@@ -121,7 +121,7 @@ function possee_query_vars($vars)
 add_filter('rest_post_search_query', 'possee_cpts_in_rest_search', 10, 2);
 function possee_cpts_in_rest_search($args, $request)
 {
-    if (isset($_GET['ct_live_search']) && $_GET['ct_live_search'] === 'true') {
+    if (isset($_GET['ct_live_search']) && sanitize_key($_GET['ct_live_search']) === 'true') {
         $args['post_type'] = array( 'post', 'book', 'checkin', 'note' );
     }
     return $args;

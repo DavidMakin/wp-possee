@@ -173,6 +173,9 @@ function possee_ping_bridgy_discover($post_id)
 add_filter('pre_insert_micropub_post', 'possee_log_micropub_payload', 1);
 function possee_log_micropub_payload($params)
 {
+    if (! defined('WP_DEBUG') || ! WP_DEBUG) {
+        return $params;
+    }
     $log_file = WP_CONTENT_DIR . '/micropub-log.json';
     file_put_contents($log_file, json_encode($params) . "\n", FILE_APPEND);
     return $params;
@@ -234,7 +237,7 @@ function possee_wp_head_microformats()
     $site_name = esc_attr(get_bloginfo('name'));
     $locale    = esc_attr(str_replace('-', '_', get_locale()));
 
-    if (is_singular('post')) {
+    if (is_singular(array( 'post', 'book', 'note', 'checkin' ))) {
         $post        = get_queried_object();
         $title       = esc_attr(strip_tags(get_the_title($post)));
         $url         = esc_url(get_permalink($post));
@@ -419,7 +422,10 @@ add_action('plugins_loaded', function () {
     // phpcs:enable
 
     if (function_exists('register_syndication_provider')) {
-        register_syndication_provider(new SynProvider_Webmention_Bridgy_Bluesky());
+        // Store instance so possee_note_bridgy_content can remove it without
+        // walking $wp_filter internals.
+        $GLOBALS['possee_bridgy_bluesky_provider'] = new SynProvider_Webmention_Bridgy_Bluesky();
+        register_syndication_provider($GLOBALS['possee_bridgy_bluesky_provider']);
     }
 }, 20);
 
@@ -502,6 +508,10 @@ function possee_syndicate_save_post($post_id, $post)
         return;
     }
     do_action('syn_syndication', $post_id, $syndicate_to);
+    // Clear _syndicate-to to prevent re-syndication on subsequent edits.
+    // Syndication Links does this automatically for the native 'post' type;
+    // we replicate the behaviour for our CPTs.
+    delete_post_meta($post_id, '_syndicate-to');
 }
 
 /**
@@ -540,6 +550,14 @@ function possee_note_bridgy_content()
         return;
     }
 
+    // Remove Bridgy providers' generic wp_footer output on notes; our dedicated
+    // output (with permalink) replaces it. Use the stored Bluesky reference
+    // directly; fall back to wp_footer callback walk for any plugin-owned
+    // providers (e.g. Mastodon) we don't hold a reference to.
+    if (isset($GLOBALS['possee_bridgy_bluesky_provider'])) {
+        remove_action('wp_footer', array( $GLOBALS['possee_bridgy_bluesky_provider'], 'wp_footer' ));
+    }
+    // WP_Hook::$callbacks structure stable since WP 4.7 (2016).
     global $wp_filter;
     if (! empty($wp_filter['wp_footer']) && isset($wp_filter['wp_footer']->callbacks)) {
         foreach ($wp_filter['wp_footer']->callbacks as $priority => $callbacks) {
@@ -548,14 +566,19 @@ function possee_note_bridgy_content()
                 if (! is_array($function) || ! is_object($function[0] ?? null)) {
                     continue;
                 }
-
+                // Skip our Bluesky provider — already removed above.
+                if (
+                    isset($GLOBALS['possee_bridgy_bluesky_provider'])
+                    && $function[0] === $GLOBALS['possee_bridgy_bluesky_provider']
+                ) {
+                    continue;
+                }
                 if (
                     'wp_footer' !== ($function[1] ?? null)
                     || ! ($function[0] instanceof SynProvider_Webmention_Bridgy)
                 ) {
                     continue;
                 }
-
                 remove_action('wp_footer', $function, $priority);
             }
         }
@@ -843,7 +866,7 @@ function possee_checkin_map_layer($outputs, $prefix, $featured_image_args)
     $img = '<a href="' . esc_url($osm_url) . '" target="_blank" rel="noopener">'
         . '<img class="sloc-map-thumb" src="' . esc_url($url) . '" alt="" loading="lazy" />'
         . '</a>';
-    $outputs['excerpt'] = preg_replace('|</div>\s*$|', $img . '</div>', $outputs['excerpt']);
+    $outputs['excerpt'] .= $img;
     return $outputs;
 }
 
@@ -876,7 +899,16 @@ function possee_strip_sloc_from_archive($content)
     }
 
     // Strip Simple Location's sloc-display div and everything inside it.
-    $content = preg_replace('~<div[^>]*class="[^"]*sloc-display[^"]*"[^>]*>.*?</div>\s*~si', '', $content);
+    // Uses a pattern that handles up to one level of nested divs (e.g. the
+    // static map <div> that some Simple Location themes include). A lazy .*?
+    // would stop at the first inner </div>; this variant explicitly skips
+    // non-div tags first, then consumes any single-level nested <div>…</div>
+    // groups before matching the outer closing tag.
+    $content = preg_replace(
+        '~<div\b[^>]*class="[^"]*sloc-display[^"]*"[^>]*>(?:[^<]|<(?!/?\bdiv\b))*(?:<div\b[^>]*>(?:[^<]|<(?!/?\bdiv\b))*</div>(?:[^<]|<(?!/?\bdiv\b))*)*</div>\s*~si',
+        '',
+        $content
+    );
 
     return $content;
 }
@@ -972,8 +1004,6 @@ function possee_checkin_header($content)
     }
     $done[ $post_id ] = true;
 
-    $post_id = get_the_ID();
-
     // Strip the auto-generated "Checked in at X, Y" prose if that's all the content is —
     // the header block replaces it. Real notes added by the user are preserved.
     $stripped = trim(wp_strip_all_tags($content));
@@ -981,8 +1011,7 @@ function possee_checkin_header($content)
         $content = '';
     }
 
-    $post_id = get_the_ID();
-    $d       = possee_checkin_data($post_id);
+    $d = possee_checkin_data($post_id);
 
     // Venue line.
     $venue_html = '';
@@ -1170,7 +1199,7 @@ function possee_sideload_micropub_photos($input, $args)
 
         $attachment_id = media_handle_sideload($file_array, $post_id);
         if (is_wp_error($attachment_id)) {
-            @unlink($tmp);
+            wp_delete_file($tmp);
             continue;
         }
 

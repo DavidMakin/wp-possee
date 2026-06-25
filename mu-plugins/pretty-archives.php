@@ -15,7 +15,7 @@ function possee_pretty_archives_rewrite_rules()
     foreach ($slugs as $pretty => $tag) {
         add_rewrite_rule("^{$pretty}/feed/(feed|rdf|rss|rss2|atom)/?$", "index.php?tag={$tag}&feed=\$matches[1]", 'top');
         add_rewrite_rule("^{$pretty}/(feed|rdf|rss|rss2|atom)/?$", "index.php?tag={$tag}&feed=\$matches[1]", 'top');
-        add_rewrite_rule("^{$pretty}/embed/?$", "index.php?tag=\$matches[1]&embed=true", 'top');
+        add_rewrite_rule("^{$pretty}/embed/?$", "index.php?tag={$tag}&embed=true", 'top');
         add_rewrite_rule("^{$pretty}/page/?([0-9]{1,})/?$", "index.php?tag={$tag}&paged=\$matches[1]", 'top');
         add_rewrite_rule("^{$pretty}/?$", "index.php?tag={$tag}", 'top');
     }

@@ -230,7 +230,10 @@ function possee_spam_bsky_self_comments($commentdata)
     // Block Bridgy Fed bouncing our own POSSE'd Bluesky posts back as webmentions.
     // Source pattern: https://brid.gy/post/bluesky/{own-DID}/...
     $source = $commentdata['comment_meta']['webmention_source_url'] ?? $commentdata['source'] ?? '';
-    if ($source && preg_match('#brid\.gy/post/bluesky/did:plc:eemo37qp56jdqiier5krh537/#', $source)) {
+    // DID stored via: wp option set possee_own_bluesky_did 'did:plc:...'
+    // Retrieve current value from: https://brid.gy/bluesky/<handle> → page source.
+    $own_did = get_option('possee_own_bluesky_did', '');
+    if ($own_did && $source && false !== strpos($source, 'brid.gy/post/bluesky/' . $own_did . '/')) {
         $commentdata['comment_approved'] = 'spam';
     }
     return $commentdata;

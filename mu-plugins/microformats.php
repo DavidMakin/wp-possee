@@ -541,7 +541,7 @@ function possee_syndication_link_checked($checked, $uid, $post_id)
 /**
  * Notes have no title and syndicated copies lack a link back.
  * Give Bridgy explicit content with the permalink so Mastodon
- * and Bluesky posts include a "blog.sleep-er.co.uk" link.
+ * and Bluesky posts include a "www.sleep-er.co.uk" link.
  */
 add_action('wp_footer', 'possee_note_bridgy_content', 0);
 function possee_note_bridgy_content()
@@ -1314,7 +1314,7 @@ function possee_syn_link_mapping($return, $url)
  *
  * WordPress returns /?p=ID for posts in 'future', 'draft', or 'pending' status.
  * Bridgy appends the source URL it's given verbatim, so syndicating a scheduled
- * post produces "Title: https://blog.sleep-er.co.uk/?p=293" on Mastodon/Bluesky.
+ * post produces "Title: https://www.sleep-er.co.uk/?p=293" on Mastodon/Bluesky.
  *
  * Fix: temporarily clone the post in WP's object cache with post_status='publish'
  * so get_permalink() resolves the pretty URL, then restore the original on shutdown.
@@ -1772,4 +1772,16 @@ function possee_set_last_checked($request)
     $value = $request->get_param('value');
     update_option('possee_n8n_last_checked', $value, false);
     return array( 'success' => true, 'lastChecked' => $value );
+}
+
+// ── Shortlink: return full permalink instead of ?p=ID ──────────
+// WordPress outputs <link rel='shortlink' href='https://example.com/?p=123' />
+// by default. Some platforms use this URL instead of the canonical one.
+// Override to return the full permalink instead.
+
+add_filter('get_shortlink', 'possee_shortlink_as_permalink', 10, 2);
+function possee_shortlink_as_permalink($shortlink, $id)
+{
+    $permalink = get_permalink($id);
+    return $permalink ?: $shortlink;
 }

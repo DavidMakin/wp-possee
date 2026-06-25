@@ -1,6 +1,8 @@
 tunnel: e86639fe-5b2d-442a-8008-d7953cf69ec7
 
 ingress:
+  - hostname: www.sleep-er.co.uk
+    service: http://nginx:80
   - hostname: blog.sleep-er.co.uk
     service: http://nginx:80
   - hostname: n8n.ts.sleep-er.co.uk

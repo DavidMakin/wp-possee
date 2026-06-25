@@ -18,15 +18,15 @@ Bridgy bridges Mastodon/Bluesky → Webmention backfeed. These are known failure
 # 1. Re-crawl via Bridgy discover
 SOURCE_KEY=$(wp option get possee_bridgy_bluesky_source_key)
 curl -X POST https://brid.gy/discover \
-  -d "url=https://blog.sleep-er.co.uk/YOUR-POST-URL/&source_key=${SOURCE_KEY}"
+  -d "url=https://www.sleep-er.co.uk/YOUR-POST-URL/&source_key=${SOURCE_KEY}"
 
 # 2. Wait ~15s, then get liker DIDs from Bluesky API
 curl "https://public.api.bsky.app/xrpc/app.bsky.feed.getLikes?uri=at://did:plc:eemo37qp56jdqiier5krh537/app.bsky.feed.post/POST_RKEY"
 
 # 3. Send webmention for each liker (double-encode AT URI and liker DID)
-curl -X POST https://blog.sleep-er.co.uk/wp-json/webmention/1.0/endpoint \
+curl -X POST https://www.sleep-er.co.uk/wp-json/webmention/1.0/endpoint \
   --data-urlencode "source=https://brid.gy/like/bluesky/AUTHOR_DID/DOUBLE_ENCODED_AT_URI/DOUBLE_ENCODED_LIKER_DID" \
-  --data-urlencode "target=https://blog.sleep-er.co.uk/YOUR-POST-URL/"
+  --data-urlencode "target=https://www.sleep-er.co.uk/YOUR-POST-URL/"
 
 # 4. Approve the resulting pending comments
 wp comment approve <ID>
@@ -46,7 +46,7 @@ nginx already bypasses cache for Bridgy (`if ($http_user_agent ~* "bridgy|brid\.
 
 **Root cause**: `get_permalink()` returns `/?p=ID` for posts in `future`, `draft`, or `pending` status. Syndication Links calls `get_permalink()` before sending the webmention. If the post was published as scheduled or had no slug yet, the wrong URL is sent.
 
-**Diagnosis**: Mastodon/Bluesky post reads "Title: https://blog.sleep-er.co.uk/?p=293" instead of pretty permalink.
+**Diagnosis**: Mastodon/Bluesky post reads "Title: https://www.sleep-er.co.uk/?p=293" instead of pretty permalink.
 
 **Fix**: `possee_syndication_force_pretty_permalink` in `microformats.php` hooks `pre_syndication_links_webmention` (priority 5). It clones the post with `post_status = 'publish'` and a computed slug so `get_permalink()` returns the pretty URL. Original restored on `shutdown`.
 
@@ -64,7 +64,7 @@ nginx already bypasses cache for Bridgy (`if ($http_user_agent ~* "bridgy|brid\.
 # 1. Trigger discover
 SOURCE_KEY=$(wp option get possee_bridgy_bluesky_source_key)
 curl -X POST https://brid.gy/discover \
-  -d "url=https://blog.sleep-er.co.uk/YOUR-POST-URL/&source_key=${SOURCE_KEY}"
+  -d "url=https://www.sleep-er.co.uk/YOUR-POST-URL/&source_key=${SOURCE_KEY}"
 
 # 2. Insert comment manually via wp eval-file (write PHP locally, scp, run)
 ```
@@ -83,7 +83,7 @@ curl -X POST https://brid.gy/discover \
 
 ```bash
 curl -X POST https://brid.gy/publish/webmention \
-  -d "source=https://blog.sleep-er.co.uk/YOUR-POST-URL/?v=2&target=https://brid.gy/publish/bluesky"
+  -d "source=https://www.sleep-er.co.uk/YOUR-POST-URL/?v=2&target=https://brid.gy/publish/bluesky"
 ```
 
 Then update `mf2_syndication` post meta to replace `https://brid.gy/publish/bluesky` with the returned Bluesky URL, and add a success entry to `syndication_log`.
@@ -109,8 +109,8 @@ Then update `mf2_syndication` post meta to replace `https://brid.gy/publish/blue
 **Diagnosis**: view source for the note page with a cache-busting query param (for example `?v=2`) and confirm only these hidden paragraphs remain:
 
 ```html
-<p class="p-bridgy-mastodon-content" style="display:none">… https://blog.sleep-er.co.uk/notes/.../</p>
-<p class="p-bridgy-bluesky-content" style="display:none">… https://blog.sleep-er.co.uk/notes/.../</p>
+<p class="p-bridgy-mastodon-content" style="display:none">… https://www.sleep-er.co.uk/notes/.../</p>
+<p class="p-bridgy-bluesky-content" style="display:none">… https://www.sleep-er.co.uk/notes/.../</p>
 ```
 
 If a third `p-bridgy-bluesky-content` still appears, purge WP-Optimize disk cache first. Cloudflare may also serve stale HTML unless you use a cache-busting query param or purge it manually.

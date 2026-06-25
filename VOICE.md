@@ -1,7 +1,7 @@
 ---
 name: wp-possee-voice
 description: >
-  Writing style guide for blog.sleep-er.co.uk. Use when writing, editing,
+  Writing style guide for www.sleep-er.co.uk. Use when writing, editing,
   or reviewing any blog post content for this site. Covers voice markers,
   anti-patterns, post structure, excerpt format, and post-type conventions.
   Trigger: any task involving drafting, editing, or reviewing post content

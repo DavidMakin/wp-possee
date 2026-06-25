@@ -86,7 +86,7 @@ ssh homeip bash << 'EOF'
 docker run --rm \
   --network wp-possee_wp-possee \
   alpine:latest \
-  wget -q -O - --header="Host: blog.sleep-er.co.uk" "http://nginx/your/path/" 2>&1
+  wget -q -O - --header="Host: www.sleep-er.co.uk" "http://nginx/your/path/" 2>&1
 EOF
 ```
 
@@ -97,7 +97,7 @@ This bypasses Cloudflare, nginx fastcgi cache (reset on recreate), and WP-Optimi
 To check if nginx is running and reachable (bypassing Cloudflare from the host machine):
 
 ```bash
-ssh homeip curl -s --resolve "blog.sleep-er.co.uk:80:172.28.0.4" "http://blog.sleep-er.co.uk/your/path/"
+ssh homeip curl -s --resolve "www.sleep-er.co.uk:80:172.28.0.4" "http://www.sleep-er.co.uk/your/path/"
 ```
 
 Get nginx IP from: `docker inspect wp-possee-nginx-1 | grep '"IPAddress"'`

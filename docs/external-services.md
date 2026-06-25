@@ -145,10 +145,10 @@ nginx inside the Docker network only listens on **port 80**, not 443. SSL termin
 
 | Component | URL format |
 |---|---|
-| External/cloudflared | `https://blog.sleep-er.co.uk/...` |
-| Internal (Docker) | `http://nginx/...` with `Host: blog.sleep-er.co.uk` |
+| External/cloudflared | `https://www.sleep-er.co.uk/...` |
+| Internal (Docker) | `http://nginx/...` with `Host: www.sleep-er.co.uk` |
 
-This applies to n8n HTTP request nodes targeting the WordPress Micropub endpoint. Using `https://blog.sleep-er.co.uk` from within the Docker network resolves to `172.28.0.4:443` (the nginx internal IP) which refuses the connection because no SSL listener exists on that interface.
+This applies to n8n HTTP request nodes targeting the WordPress Micropub endpoint. Using `https://www.sleep-er.co.uk` from within the Docker network resolves to `172.28.0.4:443` (the nginx internal IP) which refuses the connection because no SSL listener exists on that interface.
 
 The loopback-fix mu-plugin (`mu-plugins/loopback-fix.php`) does the same rewrite for WordPress-internal HTTP calls.
 
@@ -160,7 +160,7 @@ Plugin: `mcp` (mcp-wp/mcp-server), installed from the nightly build ZIP (not the
 docker compose run --rm wpcli wp plugin install --activate https://mcp-wp.github.io/mcp-server/mcp.zip
 ```
 
-**Endpoint:** `https://blog.sleep-er.co.uk/wp-json/mcp/v1/mcp`  
+**Endpoint:** `https://www.sleep-er.co.uk/wp-json/mcp/v1/mcp`  
 **Auth:** HTTP Basic — user `adminman`, application password stored in `.opencode/opencode.jsonc`.  
 **Protocol:** MCP Streamable HTTP. Clients must send `initialize` first; the response `Mcp-Session-Id` header must be carried on subsequent requests.
 

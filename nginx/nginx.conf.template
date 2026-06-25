@@ -26,6 +26,13 @@ http {
     limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;
     limit_req_zone $binary_remote_addr zone=wpadmin:10m rate=20r/m;
 
+    # Redirect old blog subdomain to new www domain
+    server {
+        listen 80;
+        server_name blog.sleep-er.co.uk;
+        return 301 https://www.sleep-er.co.uk$request_uri;
+    }
+
     server {
         listen 80;
         server_name ${DOMAIN};

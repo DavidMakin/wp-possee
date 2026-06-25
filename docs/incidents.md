@@ -3,7 +3,7 @@
 ## 2026-06-16: Missing Images on Bluesky Syndication
 
 ### Summary
-Post https://blog.sleep-er.co.uk/notes/2026-06-12-19-26/ syndicates text to Bluesky but images don't appear. Root cause: Micropub photo extraction pipeline was incomplete — images added to posts via editor after creation weren't being captured into `mf2_photo` post meta required for syndication.
+Post https://www.sleep-er.co.uk/notes/2026-06-12-19-26/ syndicates text to Bluesky but images don't appear. Root cause: Micropub photo extraction pipeline was incomplete — images added to posts via editor after creation weren't being captured into `mf2_photo` post meta required for syndication.
 
 ### Timeline
 

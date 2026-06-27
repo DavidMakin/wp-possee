@@ -176,14 +176,44 @@ ssh homeip docker compose -f /storage/Docker/wp-possee/docker-compose.yml restar
 
 *(The patch file on the server is at `/storage/Docker/wp-possee/patches/mcp-RestApi.php` — copy it there after a `git pull` if needed.)*
 
+## Mapbox Static Maps
+
+The Simple Location plugin renders checkin maps via the [Mapbox Static Images API](https://docs.mapbox.com/api/maps/static-images/). The map image is embedded as `<img class="checkin-map" src="...">` where `src` points to:
+
+```
+https://api.mapbox.com/styles/v1/{user}/{style}/static/pin-s({lng},{lat})/{lng},{lat},{zoom},0,0/{width}x{height}?access_token={token}
+```
+
+### Token URL Restrictions
+
+Mapbox tokens can have **URL restrictions** that validate the `Referer` header on each request. The Static Images API returns **403 Forbidden** if the `Referer` doesn't match the token's allowed URLs.
+
+**When changing the site domain (e.g. `blog.sleep-er.co.uk` → `www.sleep-er.co.uk`):**
+
+1. The browser sends the `Referer` header with the new domain when loading the map image
+2. Mapbox rejects the request if the new domain isn't in the token's allowed URLs
+3. The map appears as a broken image
+
+**Fix:** Go to [Mapbox Access Tokens](https://account.mapbox.com/access-tokens/), find the token used by Simple Location (`sloc_mapbox_api` in `wp_options`), and add the new domain to the **URL restrictions** list. Both old and new domains can coexist during migration.
+
+### Testing
+
+```bash
+# Test with a specific referrer — Mapbox requires Referer for restricted tokens
+curl -s -o /dev/null -w "%{http_code}" \
+  -H "Referer: https://www.sleep-er.co.uk/" \
+  "https://api.mapbox.com/styles/v1/mapbox/streets-v11/static/pin-s(...)/...?access_token=sk.ey..."
+# 200 = OK, 403 = token rejects referrer
+```
+
 ## Plugin notes
 
 | Plugin | Note |
-|---|---|
+|---|---|---|
 | `mcp` | MCP server — nightly build only; `patches/mcp-RestApi.php` must be reapplied after updates (see above) |
 | `activitypub` | Installed but inactive — activate after configuring actor URL |
 | `syndication-links` | `get_syndication_links($post_id, $args)` returns HTML or empty string |
-| `simple-location` | Hooks `the_content` at priority 11 (map) and 12 (location text); `Loc_Config::map_provider()` renders static maps |
+| `simple-location` | Hooks `the_content` at priority 11 (map) and 12 (location text); `Loc_Config::map_provider()` renders static maps. Uses Mapbox for static map tiles (see Mapbox section below) |
 | `micropub` | Filter `pre_insert_micropub_post` for post manipulation before insert |
 | `google-site-kit` | Installed but inactive — requires manual account connection |
 | `semantic-linkbacks` | `get_linkbacks()` builds meta_query with `type__not_in` for mentions |

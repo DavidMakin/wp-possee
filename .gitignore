@@ -2,4 +2,5 @@
 .env
 .opencode
 .omo
+.agent/
 .ruff_cache

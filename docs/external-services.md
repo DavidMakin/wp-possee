@@ -117,6 +117,16 @@ n8n's "Published" tag (shown next to a workflow name in the editor list) tracks 
 
 **Fix**: Open the workflow in the n8n editor and click Save once. That writes the publish history record and the tag appears.
 
+### n8n Host header drift: running instance vs git
+
+The n8n workflow's HTTP Request node `Host` header can diverge from the git-tracked JSON (`n8n-hardcover-workflow.json`) when edited via the n8n UI. The git file may have the correct value while the running instance has a stale one. Since nginx 301-redirects `blog.sleep-er.co.uk` → `www.sleep-er.co.uk`, using the wrong Host header from inside Docker causes ECONNREFUSED (the redirect goes external where there's no HTTPS listener on the nginx container's internal IP).
+
+**Symptom**: All n8n executions error with `ECONNREFUSED 172.28.0.x:443`.
+
+**Fix**: Stop n8n → edit the SQLite DB directly on the volume path (`/var/lib/docker/volumes/n8n_n8n_data/_data/database.sqlite`) → fix ownership → start n8n. Do NOT edit while n8n is running (in-memory state overwrites on graceful shutdown). Do NOT use `docker cp` (corrupts WAL-mode SQLite).
+
+**Prevention**: After any UI edit, re-export and commit the workflow JSON to keep git in sync.
+
 ### n8n `$getWorkflowStaticData` unreliable for persisted state
 
 n8n's `$getWorkflowStaticData('global')` does **not** reliably persist between executions in all deployment setups (Docker, SQLite backend). Once written, it may never update or may revert on container restart. This caused the "Hardcover → WordPress (finished books)" workflow to re-fetch the same 8 books every hour because `lastChecked` was stuck at `2026-05-18T21:53:04Z`.

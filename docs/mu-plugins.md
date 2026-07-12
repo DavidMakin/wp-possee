@@ -48,6 +48,10 @@ Per-file documentation for all mu-plugins at `/var/www/html/wp-content/mu-plugin
 
 **Named functions**: All hooks use named functions (`possee_*` prefix) for grepability. Only closure: `plugins_loaded` (wraps class definition).
 
+**Book dedup (`possee_micropub_book_deduplicate`)**: Hooks `pre_insert_micropub_post`. Finds existing books by ISBN, then fuzzy title+author. When a match is found, calls `wp_update_post()` and `update_post_meta()` directly before setting `$args['ID']`.
+
+**Why direct update is necessary**: The Micropub plugin's `insert_post()` method short-circuits when `$args['ID']` is already set (line 661 of `class-endpoint-controller.php`) — it returns without calling `wp_insert_post()`. Any meta in `$args['meta_input']` is silently discarded. The dedup filter must therefore perform the update itself, then set `$args['ID']` to prevent duplicate creation.
+
 **Book meta dedup map**: `$book_meta_map` in `possee_micropub_book_deduplicate` maps Micropub property names (e.g. `hardcover-slug`, `book-pages`, `book-cover-url`) to `mf2_*` meta keys. To add a new book field: (1) add to n8n GraphQL query, (2) add Micropub property in JS payload, (3) add to `$book_meta_map`. No PHP template changes needed if the display code already handles it.
 
 ## `theme-styles.php`

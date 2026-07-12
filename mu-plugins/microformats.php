@@ -1512,8 +1512,23 @@ function possee_micropub_book_deduplicate($args)
     }
 
     if ($existing_id) {
-        // Short-circuit — book already exists.
-        $args['ID'] = $existing_id;
+        // Book already exists — update it in place.
+        // We must do the update here because the Micropub plugin's
+        // insert_post() short-circuits when $args['ID'] is set (returns
+        // without calling wp_insert_post), so none of the meta changes
+        // in $args would be saved otherwise.
+        $update_args = array(
+            'ID'           => $existing_id,
+            'post_type'    => $args['post_type']    ?? 'book',
+            'post_status'  => $args['post_status']  ?? 'publish',
+        );
+
+        if (! empty($args['post_title'])) {
+            $update_args['post_title'] = $args['post_title'];
+        }
+        if (isset($args['post_content'])) {
+            $update_args['post_content'] = $args['post_content'];
+        }
 
         // When transitioning to "finished", update post_date to match.
         $new_status = $args['meta_input']['mf2_read-status'] ?? null;
@@ -1521,10 +1536,21 @@ function possee_micropub_book_deduplicate($args)
             $finished_at = $args['meta_input']['mf2_finished-at'] ?? null;
             if ($finished_at) {
                 $date = date('Y-m-d H:i:s', strtotime($finished_at));
-                $args['post_date']     = $date;
-                $args['post_date_gmt'] = get_gmt_from_date($date);
+                $update_args['post_date']     = $date;
+                $update_args['post_date_gmt'] = get_gmt_from_date($date);
             }
         }
+
+        wp_update_post($update_args);
+
+        // Save all meta fields.
+        foreach (($args['meta_input'] ?? array()) as $key => $val) {
+            update_post_meta($existing_id, $key, $val);
+        }
+
+        // Set ID so the Micropub plugin's insert_post() short-circuits
+        // (we've already done the update — no need for it to create a new post).
+        $args['ID'] = $existing_id;
     } else {
         // Store ISBN as accessible meta for future dedup queries.
         if (! isset($args['meta_input'])) {

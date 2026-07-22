@@ -30,6 +30,7 @@ Self-hosted WordPress with POSSE syndication to Mastodon and Bluesky, with backf
 - **Never skip clearing all caches after PHP change** — OPcache (auto on mtime), nginx fastcgi cache (container recreate), and Cloudflare CDN (manual purge) are independent layers.
 - **Never use `$post->post_excerpt` to check for native excerpt** — use `has_excerpt($post_id)`. Our `get_the_excerpt` filter can return non-empty strings even without native excerpt.
 - **Never edit n8n workflows directly on the production instance** — all changes go through git (`n8n-hardcover-workflow.json`) and deployed via n8n import. Direct edits cause drift and silent failures. See [`docs/incidents.md`](docs/incidents.md) for June 16 outage details.
+- **Never use em dashes in blog posts** — use commas, periods, or sentence restructuring instead. Em dashes are a common AI-writing tell. Parentheticals use commas; clause breaks use periods.
 
 ## Blog post drafting
 

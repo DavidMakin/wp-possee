@@ -238,3 +238,26 @@ function possee_spam_bsky_self_comments($commentdata)
     }
     return $commentdata;
 }
+
+/**
+ * Rewrite legacy domain in webmention targets to current domain.
+ *
+ * After the domain migration from blog.sleep-er.co.uk → www.sleep-er.co.uk,
+ * OwnYourSwarm continues sending webmentions with targets on the old domain.
+ * The webmention plugin's hardcoded domain check rejects these (target_mismatching_domain).
+ * Intercept before validation and rewrite the target parameter.
+ */
+add_filter('rest_pre_dispatch', 'possee_rewrite_legacy_webmention_target', 10, 3);
+function possee_rewrite_legacy_webmention_target($result, $server, $request)
+{
+    $route = $request->get_route();
+    if (false === strpos($route, '/webmention/')) {
+        return $result;
+    }
+    $target = $request->get_param('target');
+    if ($target && str_contains($target, 'blog.sleep-er.co.uk')) {
+        $new_target = str_replace('blog.sleep-er.co.uk', 'www.sleep-er.co.uk', $target);
+        $request->set_param('target', $new_target);
+    }
+    return $result;
+}

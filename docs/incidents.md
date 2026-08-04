@@ -192,3 +192,65 @@ n8n `hardcover-to-wordpress` workflow failed June 11 16:00 UTC and remained brok
 - `docs/incidents.md` (this file)
 - Manual DB update: `wp_postmeta` post_id=3774, mf2_read-status → "finished"
 - n8n workflow: restored from git → deployment (execution 708)
+
+## 2026-08-04: Micropub Endpoint 404 (IndieAuth Constant Gate) — OwnYourSwarm Disabled
+
+### Summary
+All Micropub requests (OwnYourSwarm checkins, n8n book sync) returned 404 `rest_no_route`. OwnYourSwarm auto-disabled the account after repeated errors. Root cause: **plugin version incompatibility**, not plugin deactivation — Micropub 2.5.2's bootstrap gate checks `defined('INDIEAUTH_PLUGIN_VERSION')`, a constant introduced in IndieAuth 4.7.0. Production ran IndieAuth 4.6.0, so Micropub silently took the else branch: no `rest_api_init` hook, zero routes registered.
+
+### Timeline
+
+**July 27 12:53 UTC - Micropub updated to 2.5.2**
+- Plugin files updated (mtimes confirmed on production)
+- 2.5.2 requires IndieAuth ≥ 4.7.0 (per plugin README)
+- IndieAuth still 4.6.0 → constant gate fails silently → endpoint dead
+
+**July 25-26 - Last working checkins** (posts 3934-3938) — arrived before the 2.5.2 update
+
+**July 27 → Aug 4 - Silent outage**
+- All `/wp-json/micropub/1.0/endpoint` requests → 404
+- n8n hardcover book workflow posting with 401/404s (silent failure, retries)
+- OwnYourSwarm accumulated errors → account auto-disabled
+
+**Aug 4 - Diagnosis**
+- Routes absent: `rest_get_server()` shows zero micropub routes
+- `INDIEAUTH_PLUGIN_VERSION` undefined (IndieAuth 4.6.0)
+- Micropub plugin ACTIVE (2.5.2) — initial deactivation theory disproven
+
+### Root Cause
+
+Micropub 2.5.2 bootstrap gate (micropub.php ~line 150):
+
+```php
+if ( defined( 'INDIEAUTH_PLUGIN_VERSION' ) ) {
+    // init hooks, register_rest_route() ...
+} else {
+    // admin notices only — NO routes, NO rest_api_init callback
+}
+```
+
+IndieAuth 4.6.0 defined only `INDIEAUTH_TICKET_ENDPOINT`/`INDIEAUTH_ICON_*`. The `INDIEAUTH_PLUGIN_VERSION` constant landed in 4.7.0. Gate fails → routes never registered → 404 for everything → OYS safety disable.
+
+### Fix
+
+1. **IndieAuth 4.6.0 → 4.7.1** via WP-CLI (`wp plugin update indieauth`)
+2. Verified: both `/wp-json/micropub/1.0/endpoint` and `/media` routes registered
+3. Unauthenticated request → 403 (auth check working, was 404 before)
+4. n8n book sync confirmed live: 7× POST → 201 Created at 09:00 UTC (existing books updated)
+
+### Follow-up Hardening (done same day)
+
+- **nginx**: old-domain `blog.sleep-er.co.uk` redirect changed to `return 308` for `/wp-json/micropub/` paths. 301 converts POST → GET per RFC, silently breaking Micropub clients configured with the old domain. 308 preserves method. General traffic stays 301.
+- **OYS**: account must be re-enabled in OwnYourSwarm dashboard (user action); resend re-published checkins.
+- **Discovery**: `/.well-known/micropub` returns 404 and homepage lacks `<link rel="micropub">`. Non-blocking (OYS stores explicit endpoint URL) but spec-ideal to add later.
+
+### Prevention
+
+- Micropub 2.5.2 requires IndieAuth ≥ 4.7.0 — treat as a hard dependency pair. If either updates, verify the other.
+- After any plugin version bump touching Micropub/IndieAuth: check routes (`wp eval 'var_export(array_keys(rest_get_server()->get_routes()))'` | grep micropub) and POST a test to the endpoint.
+- n8n book workflow failure is invisible — its errors are not surfaced; consider alerting on Micropub 404 rate.
+
+## Files Changed
+- `docs/incidents.md` (this file)
+- Production: IndieAuth plugin 4.6.0 → 4.7.1
+- Production: `nginx/nginx.conf` + `nginx.conf.template` — 308 location for old-domain micropub path

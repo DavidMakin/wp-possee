@@ -68,9 +68,10 @@ Changes deployed June 16 14:26. Post 3787 backfilled with `mf2_photo` meta manua
 - Single extraction point (e.g., only in rendering) insufficient
 
 #### Syndication Age Limits Block Updates
-- Syndication Links plugin refuses to re-send posts older than ~3.7 days
-- Intentional to prevent spam, but blocks legitimate image updates
-- Workaround: clear `syndication_log` meta to allow manual retry, or use `syn_syndication` action directly
+- Syndication Links plugin refuses to re-send posts whose `post_date` is older than 1 day (hardcoded `DAY_IN_SECONDS` in `Post_Syndication::syndication()`, measured from original publish, not `post_modified`)
+- Intentional to prevent spam, but blocks legitimate updates to older posts
+- The gate does NOT exist in provider `posse()` — direct provider calls bypass it
+- Workaround: set target links, call provider `posse()` directly (protected `$targets` needs ReflectionProperty), prune targets, clear `syndication_log`; the `syn_syndication` action does NOT bypass the gate
 
 ### Prevention
 

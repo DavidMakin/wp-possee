@@ -427,6 +427,20 @@ add_action('plugins_loaded', function () {
         $GLOBALS['possee_bridgy_bluesky_provider'] = new SynProvider_Webmention_Bridgy_Bluesky();
         register_syndication_provider($GLOBALS['possee_bridgy_bluesky_provider']);
     }
+
+    // Register the Micropub-based Bridgy Mastodon provider. The stock plugin
+    // only loads it when SYNDICATION_LINKS_BRIDGY_WEBMENTION === 0, but we force
+    // the constant to 1 to use webmention-based providers for everything else.
+    // The Micropub path posts the mf2 JSON directly to brid.gy/micropub with the
+    // bearer token (option bridgy_mastodon_token), bypassing webmention
+    // discovery, our interception bracket, and the delayed-cron race entirely.
+    $micropub_mastodon_class = WP_PLUGIN_DIR . '/syndication-links/includes/micropub/class-synprovider-micropub-bridgy-mastodon.php';
+    if (class_exists('SynProvider_Micropub') && file_exists($micropub_mastodon_class)) {
+        require_once $micropub_mastodon_class;
+        if (class_exists('SynProvider_Micropub_Bridgy_Mastodon')) {
+            register_syndication_provider(new SynProvider_Micropub_Bridgy_Mastodon());
+        }
+    }
 }, 20);
 
 /**

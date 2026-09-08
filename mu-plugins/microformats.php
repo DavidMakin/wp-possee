@@ -1,125 +1,25 @@
 <?php
 
-defined('SYNDICATION_LINKS_BRIDGY_WEBMENTION') || define('SYNDICATION_LINKS_BRIDGY_WEBMENTION', 1);
+// Bridgy maps responses to the post by the page's u-syndication link, which
+// only exists after syndication has run and the page cache is purged.
 
-/**
- * Delay Bridgy publish webmentions sent during Micropub post creation.
- *
- * When a post is created via Micropub (Quill etc.), Syndication Links fires
- * the Bridgy webmention immediately — before nginx/Cloudflare/WP-Optimize
- * caches have the page ready. Bridgy fetches a stale page, can't find the
- * u-syndication link, and caches the failure. Subsequent retries return the
- * same error without re-fetching (Bridgy deduplicates on source+target).
- *
- * Fix: hook micropub_syndication at priorities 1 and 99 to bracket Syndication
- * Links (priority 10). At priority 1, install a pre_http_request filter that
- * intercepts outbound requests to brid.gy/publish/* and returns a fake
- * response, blocking the actual send. At priority 99, remove the filter, clean
- * up any error log entries written by Syndication Links, and schedule the real
- * send 90 seconds later via WP-Cron — by which time caches are warm.
- */
+/** UIDs of the Bridgy providers we syndicate to. */
+define('POSSEE_BRIDGY_UIDS', array( 'micropub-bluesky-bridgy', 'micropub-mastodon-bridgy' ));
 
-/** UIDs of Bridgy providers we want to delay. */
-define('POSSEE_BRIDGY_UIDS', array( 'webmention-bluesky-bridgy', 'webmention-mastodon-bridgy' ));
-
-/** Whether we are currently inside a micropub_syndication call. */
-$GLOBALS['possee_in_micropub_syndication'] = false;
-
-add_action('micropub_syndication', 'possee_micropub_syndication_start', 1, 2);
-function possee_micropub_syndication_start($post_id, $syndicate_to)
+add_action('micropub_syndication', 'possee_schedule_bridgy_discover', 99, 2);
+add_action('syn_syndication', 'possee_schedule_bridgy_discover', 99, 2);
+function possee_schedule_bridgy_discover($post_id, $syndicate_to)
 {
-    $pending = array_intersect($syndicate_to, POSSEE_BRIDGY_UIDS);
-    if (empty($pending)) {
+    if (empty(array_intersect((array) $syndicate_to, POSSEE_BRIDGY_UIDS))) {
         return;
     }
-    $GLOBALS['possee_in_micropub_syndication'] = array(
-        'post_id'     => $post_id,
-        'pending'     => array_values($pending),
-        'intercepted' => array(),
-    );
-    add_filter('pre_http_request', 'possee_intercept_bridgy_request', 1, 3);
+    wp_schedule_single_event(time() + 90, 'possee_bridgy_discover', array( $post_id ));
 }
 
-add_action('micropub_syndication', 'possee_micropub_syndication_end', 99, 2);
-function possee_micropub_syndication_end($post_id, $syndicate_to)
-{
-    if (! $GLOBALS['possee_in_micropub_syndication']) {
-        return;
-    }
-    remove_filter('pre_http_request', 'possee_intercept_bridgy_request', 1);
-
-    $ctx         = $GLOBALS['possee_in_micropub_syndication'];
-    $intercepted = $ctx['intercepted'];
-    $GLOBALS['possee_in_micropub_syndication'] = false;
-
-    if (empty($intercepted)) {
-        return;
-    }
-
-    // Syndication Links wrote a WP_Error log entry because our fake interception
-    // caused endpoint discovery to return null (no webmention link found in response).
-    // Remove those entries — the real send will write its own when cron fires.
-    $log     = get_post_meta($post_id, 'syndication_log', true) ?: array();
-    $new_log = array_filter($log, function ($entry) use ($intercepted) {
-        return ! in_array($entry['uid'] ?? '', $intercepted, true);
-    });
-    update_post_meta($post_id, 'syndication_log', array_values($new_log));
-
-    // Schedule the real send 90 seconds later.
-    wp_schedule_single_event(time() + 90, 'possee_bridgy_delayed', array( $post_id, $intercepted ));
-}
-
-/**
- * Intercept outbound HTTP requests to brid.gy/publish/* and return a fake 202.
- * Records which Bridgy UID was intercepted so we can schedule it for real later.
- */
-function possee_intercept_bridgy_request($preempt, $args, $url)
-{
-    if (strpos($url, 'brid.gy/publish') === false) {
-        return $preempt;
-    }
-    // Identify which provider this is for.
-    $uid = null;
-    if (strpos($url, '/bluesky') !== false) {
-        $uid = 'webmention-bluesky-bridgy';
-    } elseif (strpos($url, '/mastodon') !== false) {
-        $uid = 'webmention-mastodon-bridgy';
-    }
-    if ($uid && is_array($GLOBALS['possee_in_micropub_syndication'])) {
-        $GLOBALS['possee_in_micropub_syndication']['intercepted'][] = $uid;
-    }
-    // Return a fake 202 Accepted so Syndication Links doesn't log an error.
-    return array(
-        'headers'  => array( 'content-type' => 'application/json' ),
-        'body'     => '{"status":"deferred"}',
-        'response' => array( 'code' => 202, 'message' => 'Accepted' ),
-        'cookies'  => array(),
-        'filename' => null,
-    );
-}
-
-add_action('possee_bridgy_delayed', 'possee_bridgy_delayed_handler', 10, 2);
-function possee_bridgy_delayed_handler($post_id, $syndicate_to)
-{
-    do_action('syn_syndication', $post_id, $syndicate_to);
-
-    // After syndication, clear WP-Optimize page cache for this post so that
-    // when Bridgy crawls it (see below) it gets a fresh page with the new
-    // u-syndication link rather than a stale cached copy.
-    // (Nginx already bypasses its fastcgi cache for Bridgy's user-agent.)
-    possee_clear_post_page_cache($post_id);
-
-    // Ping Bridgy's /discover endpoint so it re-crawls the post and learns the
-    // mapping between the Bluesky AT URI and the blog post URL. Without this,
-    // Bridgy may have crawled the page before the 90-second Bluesky cron fired
-    // and stored the post without a Bluesky syndication link — causing every
-    // subsequent like/reply to report "No webmention targets".
-    //
-    // Source key is the Bridgy datastore key for the Bluesky account. Store it
-    // via: wp option set possee_bridgy_bluesky_source_key '<value>'
-    // Retrieve the current value from: https://brid.gy/bluesky/<handle> → page source.
-    possee_ping_bridgy_discover($post_id);
-}
+// Nginx already skips its fastcgi cache for Bridgy's user-agent; only the
+// WP-Optimize disk cache can still hand it a pre-syndication copy.
+add_action('possee_bridgy_discover', 'possee_clear_post_page_cache');
+add_action('possee_bridgy_discover', 'possee_ping_bridgy_discover');
 
 /**
  * Clear WP-Optimize disk page cache for a single post URL.
@@ -366,83 +266,6 @@ function possee_wp_head_microformats()
     }
 }
 
-add_action('plugins_loaded', function () {
-    if (! class_exists('SynProvider_Webmention_Bridgy')) {
-        return;
-    }
-
-    // phpcs:disable PSR1.Classes.ClassDeclaration.MissingNamespace, PSR1.Methods.CamelCapsMethodName, Squiz.Classes.ValidClassName.NotCamelCaps
-    // Class extends Syndication Links plugin — naming dictated by WP plugin API, not PSR-12.
-    class SynProvider_Webmention_Bridgy_Bluesky extends SynProvider_Webmention_Bridgy
-    {
-        public function __construct($args = array())
-        {
-            $this->name = 'Bluesky via Bridgy';
-            $this->uid  = 'webmention-bluesky-bridgy';
-
-            $option = get_option('syndication_provider_enable');
-            $enable = is_array($option) ? in_array($this->uid, $option) : false;
-
-            if ($enable) {
-                add_action('wp_footer', array( $this, 'wp_footer' ));
-            }
-
-            parent::__construct($args);
-        }
-
-        public function wp_footer()
-        {
-            // Always output p-bridgy-bluesky-content so Bridgy uses this text
-            // rather than parsing e-content (which may contain metadata or footers).
-            // Only on singular posts — no need on archives/feeds.
-            if (! is_singular()) {
-                return;
-            }
-            // Notes have dedicated p-bridgy-*-content from possee_note_bridgy_content()
-            // that includes the permalink. Skip here to avoid duplicate output.
-            if (is_singular('note')) {
-                return;
-            }
-            if (( 1 === (int) get_option('syndication_use_excerpt') ) && has_excerpt()) {
-                $text = get_the_excerpt();
-            } else {
-                $text = wp_strip_all_tags(get_the_content());
-                $text = trim($text);
-            }
-            if ($text) {
-				printf( '<p class="p-bridgy-bluesky-content" style="display:none">%s</p>', esc_html( $text ) ); // phpcs:ignore
-            }
-        }
-
-        public function get_target()
-        {
-            return 'https://brid.gy/publish/bluesky';
-        }
-    }
-    // phpcs:enable
-
-    if (function_exists('register_syndication_provider')) {
-        // Store instance so possee_note_bridgy_content can remove it without
-        // walking $wp_filter internals.
-        $GLOBALS['possee_bridgy_bluesky_provider'] = new SynProvider_Webmention_Bridgy_Bluesky();
-        register_syndication_provider($GLOBALS['possee_bridgy_bluesky_provider']);
-    }
-
-    // Register the Micropub-based Bridgy Mastodon provider. The stock plugin
-    // only loads it when SYNDICATION_LINKS_BRIDGY_WEBMENTION === 0, but we force
-    // the constant to 1 to use webmention-based providers for everything else.
-    // The Micropub path posts the mf2 JSON directly to brid.gy/micropub with the
-    // bearer token (option bridgy_mastodon_token), bypassing webmention
-    // discovery, our interception bracket, and the delayed-cron race entirely.
-    $micropub_mastodon_class = WP_PLUGIN_DIR . '/syndication-links/includes/micropub/class-synprovider-micropub-bridgy-mastodon.php';
-    if (class_exists('SynProvider_Micropub') && file_exists($micropub_mastodon_class)) {
-        require_once $micropub_mastodon_class;
-        if (class_exists('SynProvider_Micropub_Bridgy_Mastodon')) {
-            register_syndication_provider(new SynProvider_Micropub_Bridgy_Mastodon());
-        }
-    }
-}, 20);
-
 /**
  * Extract Gutenberg image blocks into mf2_photo post meta.
  *
@@ -515,12 +338,6 @@ function possee_syndicate_save_post($post_id, $post)
     if (empty($syndicate_to) || ! is_array($syndicate_to)) {
         return;
     }
-    // Don't fire if this post is already being processed via micropub_syndication
-    // (the Micropub creation path fires before save_post so it would have cleared
-    // or already processed the meta by now).
-    if (is_array($GLOBALS['possee_in_micropub_syndication'] ?? false)) {
-        return;
-    }
     do_action('syn_syndication', $post_id, $syndicate_to);
     // Clear _syndicate-to to prevent re-syndication on subsequent edits.
     // Syndication Links does this automatically for the native 'post' type;
@@ -550,69 +367,6 @@ function possee_syndication_link_checked($checked, $uid, $post_id)
         return $checked;
     }
     return in_array($uid, $syndicate_to, true);
-}
-
-/**
- * Notes have no title and syndicated copies lack a link back.
- * Give Bridgy explicit content with the permalink so Mastodon
- * and Bluesky posts include a "www.sleep-er.co.uk" link.
- */
-add_action('wp_footer', 'possee_note_bridgy_content', 0);
-function possee_note_bridgy_content()
-{
-    if (! is_singular('note')) {
-        return;
-    }
-
-    // Remove Bridgy providers' generic wp_footer output on notes; our dedicated
-    // output (with permalink) replaces it. Use the stored Bluesky reference
-    // directly; fall back to wp_footer callback walk for any plugin-owned
-    // providers (e.g. Mastodon) we don't hold a reference to.
-    if (isset($GLOBALS['possee_bridgy_bluesky_provider'])) {
-        remove_action('wp_footer', array( $GLOBALS['possee_bridgy_bluesky_provider'], 'wp_footer' ));
-    }
-    // WP_Hook::$callbacks structure stable since WP 4.7 (2016).
-    global $wp_filter;
-    if (! empty($wp_filter['wp_footer']) && isset($wp_filter['wp_footer']->callbacks)) {
-        foreach ($wp_filter['wp_footer']->callbacks as $priority => $callbacks) {
-            foreach ($callbacks as $callback) {
-                $function = $callback['function'] ?? null;
-                if (! is_array($function) || ! is_object($function[0] ?? null)) {
-                    continue;
-                }
-                // Skip our Bluesky provider — already removed above.
-                if (
-                    isset($GLOBALS['possee_bridgy_bluesky_provider'])
-                    && $function[0] === $GLOBALS['possee_bridgy_bluesky_provider']
-                ) {
-                    continue;
-                }
-                if (
-                    'wp_footer' !== ($function[1] ?? null)
-                    || ! ($function[0] instanceof SynProvider_Webmention_Bridgy)
-                ) {
-                    continue;
-                }
-                remove_action('wp_footer', $function, $priority);
-            }
-        }
-    }
-
-    $post        = get_queried_object();
-    $permalink   = esc_url(get_permalink($post));
-    $content_raw = get_post_field('post_content', $post);
-    $content     = esc_html(wp_trim_words(strip_tags($content_raw), 55));
-
-    printf(
-        '<p class="p-bridgy-mastodon-content" style="display:none">%s %s</p>' . "\n",
-        $content,
-        $permalink
-    );
-    printf(
-        '<p class="p-bridgy-bluesky-content" style="display:none">%s %s</p>' . "\n",
-        $content,
-        $permalink
-    );
 }
 
 add_filter('blocksy:options:meta:meta_default_elements', 'possee_register_meta_defaults');
@@ -1324,7 +1078,7 @@ function possee_syn_link_mapping($return, $url)
 }
 
 /**
- * Ensure get_permalink() returns the pretty URL during webmention syndication.
+ * Ensure get_permalink() returns the pretty URL during syndication.
  *
  * WordPress returns /?p=ID for posts in 'future', 'draft', or 'pending' status.
  * Bridgy appends the source URL it's given verbatim, so syndicating a scheduled
@@ -1333,7 +1087,8 @@ function possee_syn_link_mapping($return, $url)
  * Fix: temporarily clone the post in WP's object cache with post_status='publish'
  * so get_permalink() resolves the pretty URL, then restore the original on shutdown.
  */
-add_action('pre_syndication_links_webmention', 'possee_syndication_force_pretty_permalink', 5);
+add_action('syn_syndication', 'possee_syndication_force_pretty_permalink', 5);
+add_action('micropub_syndication', 'possee_syndication_force_pretty_permalink', 5);
 function possee_syndication_force_pretty_permalink($post_id)
 {
     $post = get_post($post_id);

@@ -9,14 +9,17 @@ Per-file documentation for all mu-plugins at `/var/www/html/wp-content/mu-plugin
 - OpenGraph + Twitter Card meta tags on singular posts and front page
 - `h-entry` class on `post_class`, `p-name` span on singular titles
 
-**Bridgy Bluesky syndication provider**
-- Extends `SynProvider_Webmention_Bridgy` as `SynProvider_Webmention_Bridgy_Bluesky`
-- Registers `webmention-bluesky-bridgy` provider for Syndication Links
-- Outputs hidden `.p-bridgy-bluesky-content` on singular posts — Bridgy uses this instead of `e-content`
+**Bridgy syndication providers**
 
-**Delayed Bridgy cron + discover ping**
-- `possee_bridgy_delayed_handler`: fires 90s after Micropub post; calls `syn_syndication`, clears WP-Optimize cache, pings Bridgy discover
-- `possee_clear_post_page_cache($post_id)`: clears WP-Optimize disk cache for the post URL
+- Publishes over Micropub: `micropub-bluesky-bridgy` and `micropub-mastodon-bridgy`, both registered by Syndication Links itself
+- Tokens live in the `bridgy_bluesky_token` and `bridgy_mastodon_token` options; without one the provider is disabled
+- Content is sent in the request, so Bridgy never crawls the page to publish
+
+**Discover cron + cache purge**
+
+- `possee_schedule_bridgy_discover`: on `syn_syndication` / `micropub_syndication` (priority 99), schedules the cron 90s out
+- `possee_bridgy_discover` cron: clears the WP-Optimize cache, then pings Bridgy discover so backfeed can map responses to the post
+- `possee_clear_post_page_cache($post_id)`: clears the WP-Optimize disk cache for the post URL
 - `possee_ping_bridgy_discover($post_id)`: POSTs to `https://brid.gy/discover`
 
 **Custom post type syndication via wp-admin**

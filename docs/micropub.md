@@ -1,6 +1,6 @@
 # Micropub & Microformats
 
-e-content handling, Bridgy Bluesky content extraction, and related filter interactions.
+e-content handling, what gets syndicated, and related filter interactions.
 
 ## e-content nesting (accepted behavior)
 
@@ -12,7 +12,7 @@ This creates **nested `e-content` divs**. The nesting is intentional and accepte
 
 - `remove_filter()` does not reliably remove the Micropub renderer — the filter stays registered.
 - Regex-stripping the inner wrapper is fragile — Micropub's `generate_post_content` may emit other content before/after the `e-content` div (interactions, gallery shortcodes).
-- Bridgy reads `p-bridgy-bluesky-content` instead of parsing `e-content` (see below), so the nesting doesn't affect syndication.
+- Syndication never sees the wrappers: they are added by `the_content` filters that bail unless `is_singular()` and `in_the_loop()`, and syndication runs outside the loop (see below).
 
 Accept the nesting. The `e-content` wrapper code in `microformats.php`:
 
@@ -30,13 +30,14 @@ function possee_wrap_econtent( $content ) {
 
 The hidden div (dt-published, u-url) is placed **before** the e-content opening tag, not inside it. This keeps ISO timestamps and URLs out of what Bridgy parses as e-content text.
 
-## Bridgy Bluesky content: always emit `p-bridgy-bluesky-content`
+## What Bridgy publishes
 
-Bridgy reads the `e-content` microformat value to determine what to post to Bluesky. The `e-content` div includes all inner text — including `dt-published` ISO timestamp, `u-url`, "Added via Quill" footers, and Micropub wrappers.
+Publishing goes over Micropub, so Bridgy posts the `content` property from the request and never parses the page. Bridgy always uses `content`, even when `name` is also sent, so titles do not become the post text.
 
-**Fix**: `SynProvider_Webmention_Bridgy_Bluesky::wp_footer()` always emits `<p class="p-bridgy-bluesky-content" style="display:none">` on singular posts. Bridgy treats this as authoritative and ignores `e-content`. The text is `wp_strip_all_tags(get_the_content())` — raw post text with no metadata or footers.
+Syndication Links builds that content in `SynProvider_Micropub::get_content()`:
 
-**Hidden div placement**: The hidden `p-bridgy-bluesky-content` must be placed **outside** `e-content` (before its opening tag). If inside `e-content`, the timestamp/footer text is still included in what Bridgy reads.
+- `syn_get_post_content()` runs the raw content through `the_content`. Our filters all bail unless `is_singular()` and `in_the_loop()`, so none of the on-page furniture reaches Bridgy.
+- With `syndication_use_excerpt` set and a post excerpt present, the excerpt replaces the content and the backlink is dropped. Otherwise the text is truncated (300 chars for Bluesky, 500 for Mastodon) with the shortlink in brackets.
 
 ## `get_comment_text` filter order (priority 13)
 

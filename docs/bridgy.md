@@ -51,7 +51,7 @@ nginx already bypasses cache for Bridgy (`if ($http_user_agent ~* "bridgy|brid\.
 
 **Diagnosis**: Mastodon/Bluesky post reads "Title: https://www.sleep-er.co.uk/?p=293" instead of pretty permalink.
 
-**Fix**: `possee_syndication_force_pretty_permalink` in `microformats.php` hooks `syn_syndication` and `micropub_syndication` (priority 5). It clones the post with `post_status = 'publish'` and a computed slug so `get_permalink()` returns the pretty URL. Original restored on `shutdown`.
+**Fix**: `possee_syndication_prepare_post` in `microformats.php` hooks `syn_syndication` and `micropub_syndication` (priority 5). It clones the post with `post_status = 'publish'` and a computed slug so `get_permalink()` returns the pretty URL, and appends the permalink to any excerpt, because Syndication Links sends the excerpt verbatim with no backlink. Original restored on `shutdown`.
 
 **One-off recovery**: Resend via Bridgy with cache-busting param (`?v=N` on source URL), then update `mf2_syndication` meta.
 
@@ -99,6 +99,35 @@ wp option set bridgy_bluesky_token '<value>'
 **Permanent fix**: `possee_syndicate_save_post` hook in `microformats.php` (priority 20 on `save_post`): (1) only processes `note`, `checkin`, `book` types, (2) skips unless status is `publish` or `future`, (3) reads `_syndicate-to` meta that Syndication Links set at priority 10, (4) calls `do_action('syn_syndication', $post_id, $syndicate_to)` directly, bypassing the broken `do_pings` cron system.
 
 **One-off recovery** (for posts published before the fix): `wp post list --post_type=note --field=ID | xargs -I {} sh -c 'test -n "$(wp post meta get {} _syndicate-to 2>/dev/null)" && wp post update {} --edit'` — re-save each note with syndication targets, triggering the new handler.
+
+## Draft published after sitting for more than a day never syndicates
+
+**Root cause**: `Post_Syndication::syndication()` rejects any post whose `post_date` is more than `DAY_IN_SECONDS` old (class-post-syndication.php:202). Publishing a draft that has sat for weeks trips the gate, because the check runs against the draft's original date. Nothing reschedules afterwards, so the post stays unsyndicated.
+
+**Diagnosis**: `syndication_log` post meta holds `WP_Error` entries with code `too_old` and a message like `Post is 111.70203703704 days old - no syndication`. `mf2_syndication` is empty and `wp cron event list` shows no pending syndication.
+
+**Fix**: publish first, then fire syndication by hand. By then `post_date` is current, so the gate passes:
+
+```bash
+wp post meta delete <ID> syndication_log
+wp eval 'do_action("syn_syndication", <ID>, array("micropub-bluesky-bridgy","micropub-mastodon-bridgy"));'
+wp post meta get <ID> mf2_syndication --format=json
+```
+
+Both `syn_syndication` and `micropub_syndication` route through the same gated method, so no hook skips it. `micropub.md` records the provider-level workaround that does.
+
+## Removing a syndicated copy
+
+Bridgy Micropub supports create and delete, not update. A wrong copy has to be deleted and re-posted:
+
+```bash
+wp eval '$p = new SynProvider_Micropub_Bridgy_Bluesky();
+  $p->delete_micropub("https://bsky.app/profile/<handle>/post/<rkey>", "https://brid.gy/micropub");'
+```
+
+Then drop the stale URL from `mf2_syndication`, clear `syndication_log`, and fire `syn_syndication` again for that one target.
+
+**Excerpt content**: Bluesky gets the excerpt as plain text. An `<a>` in it comes out as literal markup and the post is truncated, so keep the permalink a bare URL. Mastodon parses the HTML either way.
 
 ## Discover cron
 

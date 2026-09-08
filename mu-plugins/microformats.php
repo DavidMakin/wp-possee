@@ -1078,7 +1078,7 @@ function possee_syn_link_mapping($return, $url)
 }
 
 /**
- * Ensure get_permalink() returns the pretty URL during syndication.
+ * Prepare a post for syndication: pretty permalink, and a link in the excerpt.
  *
  * WordPress returns /?p=ID for posts in 'future', 'draft', or 'pending' status.
  * Bridgy appends the source URL it's given verbatim, so syndicating a scheduled
@@ -1087,9 +1087,9 @@ function possee_syn_link_mapping($return, $url)
  * Fix: temporarily clone the post in WP's object cache with post_status='publish'
  * so get_permalink() resolves the pretty URL, then restore the original on shutdown.
  */
-add_action('syn_syndication', 'possee_syndication_force_pretty_permalink', 5);
-add_action('micropub_syndication', 'possee_syndication_force_pretty_permalink', 5);
-function possee_syndication_force_pretty_permalink($post_id)
+add_action('syn_syndication', 'possee_syndication_prepare_post', 5);
+add_action('micropub_syndication', 'possee_syndication_prepare_post', 5);
+function possee_syndication_prepare_post($post_id)
 {
     $post = get_post($post_id);
     if (! $post) {
@@ -1104,6 +1104,12 @@ function possee_syndication_force_pretty_permalink($post_id)
     }
     if (empty($mutated->post_name)) {
         $mutated->post_name = sanitize_title($mutated->post_title);
+    }
+    // Syndication Links sends the excerpt verbatim when a post has one, and
+    // skips its own backlink, so the syndicated copy has no way home.
+    if (! empty($mutated->post_excerpt)) {
+        // Bare URL, not an anchor: Bridgy posts the excerpt verbatim to Bluesky.
+        $mutated->post_excerpt .= ' ' . get_permalink($mutated);
     }
     // Only cache if something changed to avoid unnecessary work.
     if ($mutated != $post) {

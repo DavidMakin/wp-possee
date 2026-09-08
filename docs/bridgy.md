@@ -4,11 +4,11 @@ Bridgy bridges Mastodon/Bluesky → Webmention backfeed. These are known failure
 
 ## "No webmention targets" for likes/replies
 
-**Root cause**: Bridgy crawls the blog periodically and may hit a newly-published post **before** the 90-second delayed cron fires and adds the Bluesky `u-syndication` link. Bridgy stores the post without a Bluesky mapping. When a like/reply arrives, it reports "No webmention targets" and sends nothing.
+**Root cause**: Bridgy crawls the blog periodically and may hit a newly-published post **before** the 90-second discover cron fires and adds the Bluesky `u-syndication` link. Bridgy stores the post without a Bluesky mapping. When a like/reply arrives, it reports "No webmention targets" and sends nothing.
 
 **Diagnosis**: Check `https://brid.gy/bluesky/<handle>` → Responses section. A like entry with "No webmention targets". The Bridgy like source page has only one `u-like-of` (Bluesky URL) instead of two.
 
-**Permanent fix**: `possee_bridgy_delayed_handler` calls `possee_ping_bridgy_discover()` after `syn_syndication` fires. This POSTs to `https://brid.gy/discover` causing Bridgy to re-crawl and update the mapping.
+**Permanent fix**: the `possee_bridgy_discover` cron calls `possee_ping_bridgy_discover()` 90 seconds after syndication runs. This POSTs to `https://brid.gy/discover` causing Bridgy to re-crawl and update the mapping.
 
 **Source key**: Stored in WP option `possee_bridgy_bluesky_source_key`. If you disconnect/reconnect the Bluesky account on Bridgy, get the new value from `view-source:https://brid.gy/bluesky/sleep-er.bsky.social` (search `discover-source-key`) and update: `wp option set possee_bridgy_bluesky_source_key '<value>'`
 
@@ -36,9 +36,12 @@ nginx already bypasses cache for Bridgy (`if ($http_user_agent ~* "bridgy|brid\.
 
 ## Bridgy Fed: own POSSE'd post bouncing back as self-comment
 
-**Root cause**: Bridgy Fed sends a webmention back for your own syndicated Bluesky post. Source URL pattern: `https://brid.gy/post/bluesky/did:plc:eemo37qp56jdqiier5krh537/...` — your own DID.
+**Root cause**: the POSSE'd Bluesky post comes back as a webmention against the post it links to. It arrives in two source shapes, sometimes both for one post:
 
-**Fix**: `possee_spam_bsky_self_comments` in `comments.php` matches `brid.gy/post/bluesky/did:plc:eemo37qp56jdqiier5krh537/` in `webmention_source_url` meta and marks it spam.
+- `https://brid.gy/post/bluesky/<own DID>/...` from Bridgy backfeed
+- `https://bsky.brid.gy/convert/web/at://<own DID>/app.bsky.feed.post/<rkey>#bridgy-fed-create-...` from Bridgy Fed
+
+**Fix**: `possee_spam_bsky_self_comments` in `comments.php` matches either path with the DID from the `possee_own_bluesky_did` option and marks the comment spam. Matching the DID on its own would also kill real responses, because Bridgy puts our DID in the path of every like and reply to our posts (`brid.gy/like/bluesky/<own DID>/...`).
 
 **One-off recovery**: `wp comment delete <ID> --force`
 
@@ -48,7 +51,7 @@ nginx already bypasses cache for Bridgy (`if ($http_user_agent ~* "bridgy|brid\.
 
 **Diagnosis**: Mastodon/Bluesky post reads "Title: https://www.sleep-er.co.uk/?p=293" instead of pretty permalink.
 
-**Fix**: `possee_syndication_force_pretty_permalink` in `microformats.php` hooks `pre_syndication_links_webmention` (priority 5). It clones the post with `post_status = 'publish'` and a computed slug so `get_permalink()` returns the pretty URL. Original restored on `shutdown`.
+**Fix**: `possee_syndication_force_pretty_permalink` in `microformats.php` hooks `syn_syndication` and `micropub_syndication` (priority 5). It clones the post with `post_status = 'publish'` and a computed slug so `get_permalink()` returns the pretty URL. Original restored on `shutdown`.
 
 **One-off recovery**: Resend via Bridgy with cache-busting param (`?v=N` on source URL), then update `mf2_syndication` meta.
 
@@ -73,22 +76,19 @@ curl -X POST https://brid.gy/discover \
 
 **After inserting**: Clear nginx fastcgi cache AND WP-Optimize disk cache — both must be cleared or the page still shows the old version.
 
-## Bridgy Publish failure: "Couldn't find link to brid.gy/publish/bluesky"
+## Bridgy Publish failure over Micropub
 
-**Root cause**: Syndication Links fires the Bridgy webmention synchronously during the Micropub HTTP request — before caches warm up. Bridgy fetches stale content, fails, and **caches the failure** keyed on source+target URL pair.
+**Root cause**: publish posts mf2 JSON to `https://brid.gy/micropub` with a per-network bearer token (`bridgy_bluesky_token`, `bridgy_mastodon_token` options). A missing, wrong or revoked token is rejected and nothing is posted. Reconnecting the account on Bridgy invalidates the old token.
 
-**Diagnosis**: Check `syndication_log` post meta. A `status: 400` entry for `webmention-bluesky-bridgy` with `"Couldn't find link to brid.gy/publish/bluesky"`.
+**Diagnosis**: check `syndication_log` post meta for a non-2xx entry against `micropub-bluesky-bridgy` or `micropub-mastodon-bridgy`, with `syndication_link` meta left empty.
 
-**One-off recovery**: Send the webmention with a cache-busting query param — Bridgy treats it as a new source+target pair:
+**Token**: enable publish on the Bridgy user page (`https://brid.gy/bluesky/<handle>`, `https://brid.gy/mastodon/<handle>`), press "Get token", then store it:
 
 ```bash
-curl -X POST https://brid.gy/publish/webmention \
-  -d "source=https://www.sleep-er.co.uk/YOUR-POST-URL/?v=2&target=https://brid.gy/publish/bluesky"
+wp option set bridgy_bluesky_token '<value>'
 ```
 
-Then update `mf2_syndication` post meta to replace `https://brid.gy/publish/bluesky` with the returned Bluesky URL, and add a success entry to `syndication_log`.
-
-**Permanent fix**: `microformats.php` intercepts `micropub_syndication` at priorities 1 and 99, uses `pre_http_request` to block the immediate Bridgy send, and schedules `possee_bridgy_delayed` cron for 90 seconds later. Do not remove this — it prevents the race condition.
+**One-off recovery**: re-save the post with the target checked, which re-runs `syn_syndication`. Bridgy Micropub supports create and delete but not update, so a wrong post has to be deleted and re-posted.
 
 ## Custom post types (note/checkin/book) not syndicated when created in wp-admin
 
@@ -100,28 +100,14 @@ Then update `mf2_syndication` post meta to replace `https://brid.gy/publish/blue
 
 **One-off recovery** (for posts published before the fix): `wp post list --post_type=note --field=ID | xargs -I {} sh -c 'test -n "$(wp post meta get {} _syndicate-to 2>/dev/null)" && wp post update {} --edit'` — re-save each note with syndication targets, triggering the new handler.
 
-## Notes syndicated without a link back
+## Discover cron
 
-**Root cause**: note pages inject explicit `p-bridgy-mastodon-content` and `p-bridgy-bluesky-content` with the permalink, but Bridgy provider footer callbacks can also emit a second hidden Bluesky paragraph without the link. Bridgy may pick the wrong hidden text when both are present.
+`possee_bridgy_discover` runs 90s after syndication, with two callbacks in registration order:
 
-**Permanent fix**: `possee_note_bridgy_content` in `microformats.php` now runs at `wp_footer` priority `0` and removes any footer callback whose object is a `SynProvider_Webmention_Bridgy` before outputting the note-specific hidden paragraphs. `SynProvider_Webmention_Bridgy_Bluesky::wp_footer()` also skips `note` singles.
+1. `possee_clear_post_page_cache($post_id)` — clears WP-Optimize disk cache for the post URL
+2. `possee_ping_bridgy_discover($post_id)` — POSTs to Bridgy discover with post URL and source key
 
-**Diagnosis**: view source for the note page with a cache-busting query param (for example `?v=2`) and confirm only these hidden paragraphs remain:
-
-```html
-<p class="p-bridgy-mastodon-content" style="display:none">… https://www.sleep-er.co.uk/notes/.../</p>
-<p class="p-bridgy-bluesky-content" style="display:none">… https://www.sleep-er.co.uk/notes/.../</p>
-```
-
-If a third `p-bridgy-bluesky-content` still appears, purge WP-Optimize disk cache first. Cloudflare may also serve stale HTML unless you use a cache-busting query param or purge it manually.
-
-## Delayed cron handler
-
-`possee_bridgy_delayed_handler` sequence (fires 90s after Micropub post):
-
-1. Calls `syn_syndication()` — triggers the actual syndication webmention
-2. Calls `possee_clear_post_page_cache($post_id)` — clears WP-Optimize disk cache for the post URL
-3. Calls `possee_ping_bridgy_discover($post_id)` — POSTs to Bridgy discover with post URL and source key
+Publish itself is not delayed. Micropub carries the content in the request, so Bridgy never crawls the page to publish. The discover ping only exists so backfeed can map responses to the post.
 
 ## Compose project location
 

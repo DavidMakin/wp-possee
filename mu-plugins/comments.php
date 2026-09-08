@@ -227,13 +227,16 @@ function possee_spam_bsky_self_comments($commentdata)
         $commentdata['comment_approved'] = 'spam';
         return $commentdata;
     }
-    // Block Bridgy Fed bouncing our own POSSE'd Bluesky posts back as webmentions.
-    // Source pattern: https://brid.gy/post/bluesky/{own-DID}/...
+    // Block Bridgy bouncing our own POSSE'd Bluesky posts back as webmentions.
+    // Two source shapes: brid.gy/post/bluesky/{own-DID}/... from backfeed, and
+    // bsky.brid.gy/convert/web/at://{own-DID}/... from Bridgy Fed. Responses from
+    // other people carry our DID too, so the path has to stay part of the match.
     $source = $commentdata['comment_meta']['webmention_source_url'] ?? $commentdata['source'] ?? '';
     // DID stored via: wp option set possee_own_bluesky_did 'did:plc:...'
     // Retrieve current value from: https://brid.gy/bluesky/<handle> → page source.
     $own_did = get_option('possee_own_bluesky_did', '');
-    if ($own_did && $source && false !== strpos($source, 'brid.gy/post/bluesky/' . $own_did . '/')) {
+    $self    = array( 'brid.gy/post/bluesky/' . $own_did . '/', 'brid.gy/convert/web/at://' . $own_did . '/' );
+    if ($own_did && $source && array_filter($self, fn($p) => str_contains($source, $p))) {
         $commentdata['comment_approved'] = 'spam';
     }
     return $commentdata;

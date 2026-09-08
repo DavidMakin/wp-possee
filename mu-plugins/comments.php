@@ -216,6 +216,38 @@ function possee_webmention_avatar_url($url, $id_or_email, $args)
     return $url;
 }
 
+/**
+ * Whether a webmention source is Bridgy handing us back our own Bluesky post.
+ *
+ * Two shapes: brid.gy/post/bluesky/{own-DID}/... from backfeed, and
+ * bsky.brid.gy/convert/web/at://{own-DID}/... from Bridgy Fed. Responses from
+ * other people carry our DID too, so the path has to stay part of the match.
+ */
+function possee_is_own_bsky_source($source)
+{
+    // DID stored via: wp option set possee_own_bluesky_did 'did:plc:...'
+    // Retrieve current value from: https://brid.gy/bluesky/<handle> → page source.
+    $own_did = get_option('possee_own_bluesky_did', '');
+    if (! $own_did || ! is_string($source) || ! $source) {
+        return false;
+    }
+    return str_contains($source, 'brid.gy/post/bluesky/' . $own_did . '/')
+        || str_contains($source, 'brid.gy/convert/web/at://' . $own_did . '/');
+}
+
+/**
+ * Same for Mastodon: brid.gy/post/mastodon/{own acct}/... is our own toot.
+ */
+function possee_is_own_mastodon_source($source)
+{
+    // Acct stored via: wp option set possee_own_mastodon_acct '@user@instance'
+    $own_acct = get_option('possee_own_mastodon_acct', '');
+    if (! $own_acct || ! is_string($source) || ! $source) {
+        return false;
+    }
+    return str_contains($source, 'brid.gy/post/mastodon/' . $own_acct . '/');
+}
+
 add_filter('webmention_comment_data', 'possee_spam_bsky_self_comments', 22);
 function possee_spam_bsky_self_comments($commentdata)
 {
@@ -227,19 +259,27 @@ function possee_spam_bsky_self_comments($commentdata)
         $commentdata['comment_approved'] = 'spam';
         return $commentdata;
     }
-    // Block Bridgy bouncing our own POSSE'd Bluesky posts back as webmentions.
-    // Two source shapes: brid.gy/post/bluesky/{own-DID}/... from backfeed, and
-    // bsky.brid.gy/convert/web/at://{own-DID}/... from Bridgy Fed. Responses from
-    // other people carry our DID too, so the path has to stay part of the match.
     $source = $commentdata['comment_meta']['webmention_source_url'] ?? $commentdata['source'] ?? '';
-    // DID stored via: wp option set possee_own_bluesky_did 'did:plc:...'
-    // Retrieve current value from: https://brid.gy/bluesky/<handle> → page source.
-    $own_did = get_option('possee_own_bluesky_did', '');
-    $self    = array( 'brid.gy/post/bluesky/' . $own_did . '/', 'brid.gy/convert/web/at://' . $own_did . '/' );
-    if ($own_did && $source && array_filter($self, fn($p) => str_contains($source, $p))) {
+    if (possee_is_own_bsky_source($source) || possee_is_own_mastodon_source($source)) {
         $commentdata['comment_approved'] = 'spam';
     }
     return $commentdata;
+}
+
+// wp_new_comment() recomputes comment_approved from wp_allow_comment(), which
+// throws away anything webmention_comment_data set, and the webmention plugin
+// auto-approves Bridgy sources on pre_comment_approved at priority 11.
+add_filter('pre_comment_approved', 'possee_spam_bsky_self_approval', 12, 2);
+function possee_spam_bsky_self_approval($approved, $commentdata)
+{
+    if (is_wp_error($approved)) {
+        return $approved;
+    }
+    $source = $commentdata['comment_meta']['webmention_source_url'] ?? $commentdata['source'] ?? '';
+    if (possee_is_own_bsky_source($source) || possee_is_own_mastodon_source($source)) {
+        return 'spam';
+    }
+    return $approved;
 }
 
 /**

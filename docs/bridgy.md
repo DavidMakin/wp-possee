@@ -41,7 +41,9 @@ nginx already bypasses cache for Bridgy (`if ($http_user_agent ~* "bridgy|brid\.
 - `https://brid.gy/post/bluesky/<own DID>/...` from Bridgy backfeed
 - `https://bsky.brid.gy/convert/web/at://<own DID>/app.bsky.feed.post/<rkey>#bridgy-fed-create-...` from Bridgy Fed
 
-**Fix**: `possee_spam_bsky_self_comments` in `comments.php` matches either path with the DID from the `possee_own_bluesky_did` option and marks the comment spam. Matching the DID on its own would also kill real responses, because Bridgy puts our DID in the path of every like and reply to our posts (`brid.gy/like/bluesky/<own DID>/...`).
+**Fix**: two filters in `comments.php` share `possee_is_own_bsky_source()` and `possee_is_own_mastodon_source()`, which match the path plus the identity from the `possee_own_bluesky_did` and `possee_own_mastodon_acct` options. Matching the identity on its own would also kill real responses, because Bridgy puts our DID or acct in the path of every like and reply to our posts (`brid.gy/like/bluesky/<own DID>/...`).
+
+**Why two filters**: `webmention_comment_data` is not enough on its own. `wp_new_comment()` overwrites `comment_approved` with the result of `wp_allow_comment()` (comment.php:2440), and the webmention plugin auto-approves Bridgy sources on `pre_comment_approved` at priority 11. The verdict has to be repeated on `pre_comment_approved` at a later priority to survive.
 
 **One-off recovery**: `wp comment delete <ID> --force`
 

@@ -34,6 +34,22 @@ wp comment approve <ID>
 
 nginx already bypasses cache for Bridgy (`if ($http_user_agent ~* "bridgy|brid\.gy") { set $skip_cache 1; }`). Only WP-Optimize disk cache can serve stale content to Bridgy.
 
+## Like or reply not showing hours after it happened on Bluesky
+
+**Root cause**: Bridgy backfeed is not real time. It polls each source on a 5 hour cycle. A reaction that lands after the last poll waits for the next one.
+
+**Diagnosis**: compare the reaction time on Bluesky against the poll times on `https://brid.gy/bluesky/<handle>` (page shows "Polled X ago, next poll Y from now").
+
+```
+curl "https://public.api.bsky.app/xrpc/app.bsky.feed.getLikes?uri=at://<own DID>/app.bsky.feed.post/<RKEY>"
+```
+
+`indexedAt` is the reaction time. If the response is missing from Bridgy's Responses list but Bridgy already shows the post with the correct `Original:` link, the mapping is fine and this is poll lag, not "No webmention targets".
+
+**Fix**: force the poll instead of hand building the webmention. POST the `key` from the "Poll now" form on the Bridgy user page to `https://brid.gy/poll-now`. The reaction is delivered within seconds.
+
+**Verify**: comment row exists with `comment_type = 'like'` and `comment_approved = 1`, source `brid.gy/like/bluesky/<own DID>/<encoded AT-URI>/<encoded liker DID>`.
+
 ## Bridgy Fed: own POSSE'd post bouncing back as self-comment
 
 **Root cause**: the POSSE'd Bluesky post comes back as a webmention against the post it links to. It arrives in two source shapes, sometimes both for one post:

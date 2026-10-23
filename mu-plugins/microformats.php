@@ -70,6 +70,14 @@ function possee_ping_bridgy_discover($post_id)
     );
 }
 
+// Syndication Links hardcodes a 10s timeout; Bridgy Micropub can be slower.
+add_filter('http_request_args', function ($args, $url) {
+    if (0 === strpos($url, 'https://brid.gy/micropub')) {
+        $args['timeout'] = 30;
+    }
+    return $args;
+}, 10, 2);
+
 add_filter('pre_insert_micropub_post', 'possee_log_micropub_payload', 1);
 function possee_log_micropub_payload($params)
 {

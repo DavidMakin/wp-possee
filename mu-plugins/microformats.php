@@ -1118,6 +1118,10 @@ function possee_syndication_prepare_post($post_id)
     if (! empty($mutated->post_excerpt)) {
         // Bare URL, not an anchor: Bridgy posts the excerpt verbatim to Bluesky.
         $mutated->post_excerpt .= ' ' . get_permalink($mutated);
+        // Micropub sends only the excerpt, so tags must be literal hashtags in it.
+        foreach (get_the_tags($post_id) ?: array() as $tag) {
+            $mutated->post_excerpt .= ' #' . preg_replace('/[^\p{L}\p{N}_]+/u', '', $tag->name);
+        }
     }
     // Only cache if something changed to avoid unnecessary work.
     if ($mutated != $post) {

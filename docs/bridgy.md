@@ -69,7 +69,7 @@ curl "https://public.api.bsky.app/xrpc/app.bsky.feed.getLikes?uri=at://<own DID>
 
 **Diagnosis**: Mastodon/Bluesky post reads "Title: https://www.sleep-er.co.uk/?p=293" instead of pretty permalink.
 
-**Fix**: `possee_syndication_prepare_post` in `microformats.php` hooks `syn_syndication` and `micropub_syndication` (priority 5). It clones the post with `post_status = 'publish'` and a computed slug so `get_permalink()` returns the pretty URL, and appends the permalink to any excerpt, because Syndication Links sends the excerpt verbatim with no backlink. Original restored on `shutdown`.
+**Fix**: `possee_syndication_prepare_post` in `microformats.php` hooks `syn_syndication` and `micropub_syndication` (priority 5). It clones the post with `post_status = 'publish'` and a computed slug so `get_permalink()` returns the pretty URL, and appends the permalink and the post tags (as hashtags) to any excerpt, because Syndication Links sends the excerpt verbatim with no backlink. Original restored on `shutdown`.
 
 **One-off recovery**: Resend via Bridgy with cache-busting param (`?v=N` on source URL), then update `mf2_syndication` meta.
 

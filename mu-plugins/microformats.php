@@ -1259,6 +1259,31 @@ function possee_micropub_book_deduplicate($args)
         }
     }
 
+    // Hardcover sometimes returns a book with no ISBN and no author, so
+    // neither lookup above can match. The slug is always sent. LIKE because
+    // older posts store it as a string and newer ones as a serialized array.
+    $hc_slug = $args['meta_input']['mf2_hardcover-slug'] ?? '';
+    $hc_slug = is_array($hc_slug) ? ($hc_slug[0] ?? '') : $hc_slug;
+    if (! $existing_id && $hc_slug) {
+        $existing = get_posts(array(
+            'post_type'        => 'book',
+            'post_status'      => 'any',
+            'meta_key'         => 'mf2_hardcover-slug',
+            'meta_value'       => $hc_slug,
+            'meta_compare'     => 'LIKE',
+            'fields'           => 'ids',
+            'posts_per_page'   => 1,
+            'orderby'          => 'ID',
+            'order'            => 'ASC',
+            'update_meta_cache' => false,
+            'no_found_rows'    => true,
+        ));
+
+        if (! empty($existing)) {
+            $existing_id = $existing[0];
+        }
+    }
+
     // Fallback: fuzzy match by normalised title + LIKE author.
     // Different editions/sources use different ISBNs and some include
     // narrator names in the author field — exact match won't cut it.

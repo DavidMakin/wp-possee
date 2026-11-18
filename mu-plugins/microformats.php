@@ -1344,7 +1344,8 @@ function possee_micropub_book_deduplicate($args)
 
         // When transitioning to "finished", update post_date to match.
         $new_status = $args['meta_input']['mf2_read-status'] ?? null;
-        if ('finished' === $new_status) {
+        $old_status = (array) get_post_meta($existing_id, 'mf2_read-status', true);
+        if ('finished' === $new_status && ! in_array('finished', $old_status, true)) {
             $finished_at = $args['meta_input']['mf2_finished-at'] ?? null;
             if ($finished_at) {
                 $date = date('Y-m-d H:i:s', strtotime($finished_at));
